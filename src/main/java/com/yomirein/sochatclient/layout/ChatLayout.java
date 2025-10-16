@@ -4,6 +4,7 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 
 import java.time.Instant;
@@ -12,28 +13,29 @@ import java.util.List;
 
 public class ChatLayout extends VerticalLayout {
 
-    private final Div chatDiv = new Div();
     private final MessageList messageList = new MessageList();
     private final MessageInput messageInput = new MessageInput();
 
     public ChatLayout() {
-        addClassName("chatLayout");
 
-        VerticalLayout chatInput = new VerticalLayout(messageInput);
-        VerticalLayout chatList = new VerticalLayout(messageList);
+        Div chatInput = new Div(messageInput);
+        Div chatList = new Div(messageList);
 
         // CSS-классы
-        chatDiv.addClassName("chatDiv");
-        chatList.addClassName("chatList");
+        addClassName("chatLayout");
+        messageList.addClassName("chatList");
+        messageInput.addClassName("chatMessageInput");
         chatInput.addClassName("chatInput");
+        chatList.addClassName("chatMesasgeList");
+
 
         // Добавляем элементы в chatDiv
-        chatDiv.add(chatList, chatInput);
-        add(chatDiv);
+        add(chatList, chatInput);
 
         // Задаём размеры
+        messageList.setSizeFull();
+        chatList.setSizeFull();
         setSizeFull();
-        messageList.setWidthFull();
 
         configureMessageInput();
     }
@@ -48,7 +50,7 @@ public class ChatLayout extends VerticalLayout {
             newMessage.setUserColorIndex(3);
 
             List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-            items.add(0, newMessage);
+            items.add(newMessage);
             messageList.setItems(items);
 
             // Автопрокрутка вниз

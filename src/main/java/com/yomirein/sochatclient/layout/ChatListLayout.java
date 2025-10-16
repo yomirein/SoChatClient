@@ -3,9 +3,10 @@ package com.yomirein.sochatclient.layout;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.listbox.ListBox;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 
-public class ChatListLayout extends HorizontalLayout {
+public class ChatListLayout extends VerticalLayout {
 
     private final ListBox<String> chatListBox = new ListBox<>();
 
