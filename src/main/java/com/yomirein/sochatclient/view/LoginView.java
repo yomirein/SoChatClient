@@ -8,7 +8,7 @@ import com.vaadin.flow.router.*;
 import com.yomirein.sochatclient.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 
-@Route("")
+@Route("login")
 public class LoginView extends VerticalLayout {
     @Autowired
     public LoginView(AuthService authService) {

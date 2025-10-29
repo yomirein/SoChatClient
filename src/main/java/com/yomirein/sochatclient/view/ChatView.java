@@ -5,13 +5,23 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.Route;
+import com.yomirein.sochatclient.service.ChatService;
 
 @Route("chat")
 public class ChatView extends VerticalLayout {
+    private TextField getUserByIdInput = new TextField();
+
     private Div messages = new Div();
     private TextField input = new TextField();
 
-    public ChatView() {
+    public ChatView(ChatService chatService) {
+        Button createChat = new Button("create chat", e -> {
+            if (!getUserByIdInput.isEmpty()) {
+                //chatService.createChat();
+            }
+        });
+
+
         messages.setHeight("300px");
         messages.getStyle().set("overflow", "auto");
 
@@ -22,6 +32,6 @@ public class ChatView extends VerticalLayout {
             }
         });
 
-        add(messages, input, send);
+        add(getUserByIdInput, messages, input, send);
     }
 }

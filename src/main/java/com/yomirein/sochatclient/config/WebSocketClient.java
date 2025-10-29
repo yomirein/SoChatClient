@@ -3,6 +3,8 @@ package com.yomirein.sochatclient.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yomirein.sochatclient.model.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
@@ -10,11 +12,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.*;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+
 
 @Slf4j
 @Component
@@ -23,7 +29,7 @@ public class WebSocketClient {
     private final WebSocketStompClient stompClient;
     private StompSession stompSession;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
+    private static final Logger log = LoggerFactory.getLogger(WebSocketClient.class);
     // Хранилище обработчиков для разных чатов
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
 
@@ -58,9 +64,11 @@ public class WebSocketClient {
         StompHeaders connectHeaders = new StompHeaders();
         connectHeaders.add("Authorization", "Bearer " + token);
 
-        CompletableFuture<StompSession> f = stompClient.connect(connectUrl, new StompSessionHandlerAdapter() {
+
+        CompletableFuture<StompSession> f = stompClient.connectAsync(connectUrl, new StompSessionHandlerAdapter() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+
                 log.info("STOMP connected, sessionId={}", session.getSessionId());
             }
 
