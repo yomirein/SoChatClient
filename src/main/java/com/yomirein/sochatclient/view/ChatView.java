@@ -1,11 +1,17 @@
 package com.yomirein.sochatclient.view;
 
+import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinSession;
+import com.yomirein.sochatclient.model.Chat;
+import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.ChatService;
+
+import java.util.List;
 
 @Route("chat")
 public class ChatView extends VerticalLayout {
@@ -15,9 +21,24 @@ public class ChatView extends VerticalLayout {
     private TextField input = new TextField();
 
     public ChatView(ChatService chatService) {
+        User user = VaadinSession.getCurrent().getAttribute(User.class);
+        String token = (String) VaadinSession.getCurrent().getAttribute("token");
+
+        Text tokenText = new Text(user.getId() + ": " + token + " - " + user.getUsername());
+
+        Div chatList = new Div();
+        chatList.add(new Text("lelelele"));
+
         Button createChat = new Button("create chat", e -> {
             if (!getUserByIdInput.isEmpty()) {
-                //chatService.createChat();
+                Chat chatTest = chatService.createChat(user.getId(), Long.parseLong(getUserByIdInput.getValue()), token);
+            }
+        });
+        Button getChats = new Button("getchats", e -> {
+            List<Chat> chatList1 = chatService.getChats(user.getId(), token);
+            for (Chat chat : chatList1) {
+                System.out.println(chat.toString());
+                chatList.add(new Text(chat.getName() + "\n"));
             }
         });
 
@@ -32,6 +53,6 @@ public class ChatView extends VerticalLayout {
             }
         });
 
-        add(getUserByIdInput, messages, input, send);
+        add(getChats ,getUserByIdInput, createChat, messages, input, send, tokenText, chatList);
     }
 }

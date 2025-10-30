@@ -22,7 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 
-@Slf4j
+
 @Component
 public class WebSocketClient {
 

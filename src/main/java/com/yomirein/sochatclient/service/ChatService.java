@@ -4,12 +4,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
-import org.checkerframework.checker.units.qual.C;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -38,24 +38,46 @@ public class ChatService {
         }
     }
 
-    public List<Chat> getChatList(){
-        List<Chat> a = new ArrayList<Chat>();
-        return a;
-    }
-/*
-    public void createChat(Long userName1, Long userName2){
+    public List<Chat> getChats(Long userId, String token) {
         HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
-        var body = Map.of("username", username, "password", password);
 
-
-        ResponseEntity<String> response = restTemplate.exchange(
-                baseUrl + "/create",
+        ResponseEntity<Chat[]> response = restTemplate.exchange(
+                baseUrl + "/user/" + userId,
                 HttpMethod.GET,
                 entity,
-                String.class
+                Chat[].class
         );
-        response.getBody();
+
+        Chat[] chatsArray = response.getBody();
+        if (chatsArray == null) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(chatsArray);
     }
-*/
+    public Chat createChat(Long userId1, Long userId2, String token) {
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + token);
+
+        String url = baseUrl + "/create?user1Id=" + userId1 + "&user2Id=" + userId2;
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<Chat> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                Chat.class
+        );
+
+        System.out.println(response.getBody().toString());
+
+        try {
+            return response.getBody();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
