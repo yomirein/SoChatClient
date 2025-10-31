@@ -14,7 +14,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  */
 @SpringBootApplication
-
+@Theme("my-theme")
 @PWA(name = "SoChat Client", shortName = "SoChatJ")
 public class Application implements AppShellConfigurator {
 

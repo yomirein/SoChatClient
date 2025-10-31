@@ -14,5 +14,5 @@ public class Chat {
 
     private String name;
     private boolean isGroup;
-    private List<User> participants;
+    private List<Long> participants;
 }

@@ -114,12 +114,14 @@ public class WebSocketClient {
     /**
      * Отправить сообщение на endpoint /app/chat/{chatId}/send
      */
-    public synchronized void sendMessage(Long chatId, Message message) {
-        if (stompSession == null || !stompSession.isConnected()) {
-            throw new IllegalStateException("Not connected to WS");
-        }
-        String dest = "/app/chat/" + chatId + "/send";
-        stompSession.send(dest, message);
+    public void sendMessage(Long chatId, String content) {
+        if (stompSession == null) throw new IllegalStateException("Not connected yet");
+
+        Message message = new Message();
+        message.setChatId(chatId);
+        message.setContent(content);
+
+        stompSession.send("/app/chat/" + chatId + "/send", message);
     }
 
     public synchronized void disconnect() {

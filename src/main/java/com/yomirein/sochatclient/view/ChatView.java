@@ -7,11 +7,13 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
+import com.yomirein.sochatclient.config.WebSocketClient;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.ChatService;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @Route("chat")
 public class ChatView extends VerticalLayout {
@@ -20,11 +22,27 @@ public class ChatView extends VerticalLayout {
     private Div messages = new Div();
     private TextField input = new TextField();
 
-    public ChatView(ChatService chatService) {
+    public ChatView(ChatService chatService, WebSocketClient webSocketClient) {
         User user = VaadinSession.getCurrent().getAttribute(User.class);
         String token = (String) VaadinSession.getCurrent().getAttribute("token");
 
         Text tokenText = new Text(user.getId() + ": " + token + " - " + user.getUsername());
+
+        try {
+            webSocketClient.connect(token);
+        } catch (ExecutionException ex) {
+            throw new RuntimeException(ex);
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
+        /*
+        webSocketClient.subscribeToChat(null, null);
+
+        webSocketClient.subscribeToChat(chatId, message -> {
+            getUI().ifPresent(ui -> ui.access(() -> {
+                chatMessagesList.add(message.getSenderId() + ": " + message.getContent());
+            }));
+        });*/
 
         Div chatList = new Div();
         chatList.add(new Text("lelelele"));
@@ -49,6 +67,7 @@ public class ChatView extends VerticalLayout {
         Button send = new Button("Send", e -> {
             if (!input.isEmpty()) {
                 messages.add(new Div(new com.vaadin.flow.component.Text(input.getValue())));
+                webSocketClient.sendMessage(null, input.getValue());
                 input.clear();
             }
         });
