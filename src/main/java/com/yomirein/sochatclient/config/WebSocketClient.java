@@ -1,6 +1,7 @@
 package com.yomirein.sochatclient.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.yomirein.sochatclient.model.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -18,6 +19,8 @@ import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 
 import java.lang.reflect.Type;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -44,7 +47,13 @@ public class WebSocketClient {
         SockJsClient sockJsClient = new SockJsClient(transports);
 
         this.stompClient = new WebSocketStompClient(sockJsClient);
-        this.stompClient.setMessageConverter(new MappingJackson2MessageConverter());
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        MappingJackson2MessageConverter jacksonConverter = new MappingJackson2MessageConverter();
+        jacksonConverter.setObjectMapper(mapper);
+
+        this.stompClient.setMessageConverter(jacksonConverter);
     }
     public interface ConnectionCallback {
         void onConnected(StompSession session);
@@ -83,7 +92,7 @@ public class WebSocketClient {
     }
 
 
-    public synchronized void subscribeToChat(Long chatId, Consumer<Message> handler) {
+    public StompSession.Subscription subscribeToChat(Long chatId, String token, Consumer<Message> handler) {
         if (stompSession == null || !stompSession.isConnected()) {
             throw new IllegalStateException("Not connected to WS");
         }
@@ -92,10 +101,10 @@ public class WebSocketClient {
         chatHandlers.put(chatId, handler);
 
         StompHeaders headers = new StompHeaders();
-
+        headers.add("Authorization", "Bearer " + token);
         headers.setDestination(topic);
 
-        stompSession.subscribe(headers, new StompFrameHandler() {
+        StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
             @Override
             public Type getPayloadType(StompHeaders headers) {
                 return Message.class;
@@ -105,7 +114,6 @@ public class WebSocketClient {
             public void handleFrame(StompHeaders headers, Object payload) {
                 if (payload == null) return;
                 Message msg = (Message) payload;
-                System.out.println("Received STOMP message for chat " + chatId + ": " + msg.getContent());
 
                 Consumer<Message> h = chatHandlers.get(chatId);
                 if (h != null) {
@@ -116,6 +124,7 @@ public class WebSocketClient {
             }
         });
         System.out.println("Subscribed to " + topic);
+        return subscription;
     }
 
     public void sendMessage(Long chatId, String content, String token) {
@@ -126,6 +135,10 @@ public class WebSocketClient {
         Message message = new Message();
         message.setChatId(chatId);
         message.setContent(content);
+        //message.setTimestamp(LocalDateTime.now());
+        //message.setId(0L);
+        //message.setSenderId(0L);
+
 
         StompHeaders headers = new StompHeaders();
         headers.setDestination("/app/chat/" + chatId + "/send");
