@@ -57,84 +57,80 @@ public class ChatView extends VerticalLayout {
         setSpacing(false);
         addClassName("root-host");
 
+        chatController = new ChatController(token);
+
         ChatHeaderView chatHeaderView = new ChatHeaderView();
         ChatMainView chatMainView = new ChatMainView(chatListView, chatMessagingView);
 
-        add(new H3(user.toString()), chatHeaderView, chatMainView);
+        Button testCreateChatButton = new Button("Create Chat");
+        testCreateChatButton.addClickListener(event -> {
+            chatController.createChat(chatService, 2L);
+        });
+
+        add(new H3(user.toString()), testCreateChatButton, chatHeaderView, chatMainView);
         expand(chatMainView);
 
-        chatController = new ChatController(token);
+        var lele = webSocketClient.connect(token).thenAccept(session -> {
+            System.out.println("Connected to WebSocket!");
+            ui.access(()->{
+                System.out.println("initUi");
+                for (Chat chat : chatController.getAllChats(chatService, user.getId())){
+                    userList.add(new userInList(chat.getId(), chat.getName(), webSocketClient));
+                }
 
-        // Инициализируем UI сразу (кнопки, layout и т.д.)
-        initUi(chatService, user, token, ui);
+                for (userInList button : userList){
+                    button.addClickListener(event -> {
+                        System.out.println("button clicked");
+                        selectedChat = button.id;
+                        messageList.setItems(chatController.getChatMessages(chatService, 1L, messageList));
+                    });
+                    chatList.add(button);
+                }
 
-        // Подключаемся к WebSocket и подписываемся после подключения
-        webSocketClient.connect(token).thenAccept(session -> {
-            System.out.println("✅ Connected to WebSocket!");
-
-            // Подписываемся на чаты только после успешного подключения
-            subscribeToUserChats(chatService, user, ui);
-
+                messageList.setItems(chatController.sendMessage(webSocketClient, 1L, messageList, messageInput));
+                subscribeToUserChat(1L, ui);
+            });
         }).exceptionally(ex -> {
-            System.err.println("❌ WebSocket connection error: " + ex.getMessage());
+            System.err.println("WebSocket connection error: " + ex.getMessage());
             ex.printStackTrace();
             return null;
         });
+        System.out.println("работа");
+
     }
 
     public void initUi(ChatService chatService, User user, String token, UI ui) {
-        ui.access(() -> {
-            for (Chat chat : chatController.getAllChats(chatService, user.getId())){
-                userList.add(new userInList(chat.getId(), chat.getName(), webSocketClient));
-            }
+        System.out.println("initUi");
+        for (Chat chat : chatController.getAllChats(chatService, user.getId())){
+            userList.add(new userInList(chat.getId(), chat.getName(), webSocketClient));
+        }
 
-            for (userInList button : userList){
-                button.addClickListener(event -> {
-                    List<Message> messages = chatService.getMessages(button.id, token);
-                    for (Message message : messages){
-                        List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-                        ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(message.getTimestamp());
-                        MessageListItem newMessage = new MessageListItem(
-                                message.getContent(),
-                                message.getTimestamp().toInstant(zoneOffset),
-                                message.getSenderId().toString()
-                        );
-                        items.add(newMessage);
-                        messageList.setItems(items);
-                    }
-                });
-                chatList.add(button);
-            }
+        for (userInList button : userList){
+            button.addClickListener(event -> {
+                System.out.println("button clicked");
+                selectedChat = button.id;
+                messageList.setItems(chatController.getChatMessages(chatService, 1L, messageList));
+            });
+            chatList.add(button);
+        }
 
-            if (selectedChat != null) {
-                chatController.sendMessage(webSocketClient, selectedChat, messageList, messageInput);
-                messageList.setItems(chatController.getChatMessages(chatService, selectedChat, messageList));
-            }
-        });
+        messageList.setItems(chatController.sendMessage(webSocketClient, 1L, messageList, messageInput));
     }
 
-    private void subscribeToUserChats(ChatService chatService, User user, UI ui) {
-        List<Chat> userChats = chatController.getAllChats(chatService, user.getId());
-        System.out.println("📡 Subscribing to " + userChats.size() + " chats");
-
-        for (Chat chat : userChats) {
-            webSocketClient.subscribeToChat(chat.getId(), msg -> {
-                System.out.println("💬 Received message in chat " + chat.getId() + ": " + msg.getContent());
-                ui.access(() -> {
-                    List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-                    ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(msg.getTimestamp());
-                    MessageListItem newMessage = new MessageListItem(
-                            msg.getContent(),
-                            msg.getTimestamp().toInstant(zoneOffset),
-                            msg.getSenderId().toString()
-                    );
-                    items.add(newMessage);
-                    messageList.setItems(items);
-                });
-
-
-            });
-        }
+    private void subscribeToUserChat(Long chatId, UI ui) {
+        System.out.println("Subcribing to chat " + chatId);
+        webSocketClient.subscribeToChat(chatId, msg -> {
+            System.out.println("Received message in chat " + chatId + ": " + msg.getContent());
+            List<MessageListItem> items = new ArrayList<>(messageList.getItems());
+            ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(msg.getTimestamp());
+            MessageListItem newMessage = new MessageListItem(
+                    msg.getContent(),
+                    msg.getTimestamp().toInstant(zoneOffset),
+                    msg.getSenderId().toString()
+            );
+            items.add(newMessage);
+            messageList.setItems(items);
+        });
     }
 
 

@@ -88,12 +88,12 @@ public class ChatService {
         return user;
     }
 
-    public Chat createChat(Long userId1, Long userId2, String token) {
+    public Chat createChat(Long userId2, String token) {
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + token);
 
-        String url = baseUrl + "/create?user1Id=" + userId1 + "&user2Id=" + userId2;
+        String url = baseUrl + "/create?user2Id=" + userId2;
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 

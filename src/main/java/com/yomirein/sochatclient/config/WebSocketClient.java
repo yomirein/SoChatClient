@@ -30,7 +30,7 @@ public class WebSocketClient {
 
 
     private final WebSocketStompClient stompClient;
-    private StompSession stompSession;
+    public StompSession stompSession;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger log = LoggerFactory.getLogger(WebSocketClient.class);
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
@@ -55,28 +55,29 @@ public class WebSocketClient {
 
         StompHeaders connectHeaders = new StompHeaders();
         connectHeaders.add("Authorization", "Bearer " + token);
-        System.out.println("🔐 Connecting with token: " + token.substring(0, Math.min(10, token.length())) + "...");
+        System.out.println("Connecting with token: " + token.substring(0, Math.min(10, token.length())) + "...");
 
         stompClient.connectAsync(wsUrl, new WebSocketHttpHeaders(), connectHeaders, new StompSessionHandlerAdapter() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
-                System.out.println("✅ Connected to WS successfully");
+                System.out.println("Connected to WS successfully");
                 stompSession = session;
                 future.complete(session);
             }
 
             @Override
             public void handleException(StompSession session, StompCommand command, StompHeaders headers, byte[] payload, Throwable exception) {
-                System.err.println("❌ STOMP Exception: " + exception.getMessage());
+                System.err.println("STOMP Exception: " + exception.getMessage());
                 exception.printStackTrace();
             }
 
             @Override
             public void handleTransportError(StompSession session, Throwable exception) {
-                System.err.println("❌ Transport error: " + exception.getMessage());
+                System.err.println("Transport error: " + exception.getMessage());
                 future.completeExceptionally(exception);
             }
         });
+        System.out.println("ада");
 
         return future;
     }
@@ -91,7 +92,8 @@ public class WebSocketClient {
         chatHandlers.put(chatId, handler);
 
         StompHeaders headers = new StompHeaders();
-        headers.setDestination(topic); // ← ЭТО ОБЯЗАТЕЛЬНОЕ ПОЛЕ!
+
+        headers.setDestination(topic);
 
         stompSession.subscribe(headers, new StompFrameHandler() {
             @Override
@@ -103,20 +105,20 @@ public class WebSocketClient {
             public void handleFrame(StompHeaders headers, Object payload) {
                 if (payload == null) return;
                 Message msg = (Message) payload;
-                System.out.println("📨 Received STOMP message for chat " + chatId + ": " + msg.getContent());
+                System.out.println("Received STOMP message for chat " + chatId + ": " + msg.getContent());
 
                 Consumer<Message> h = chatHandlers.get(chatId);
                 if (h != null) {
                     h.accept(msg);
                 } else {
-                    System.out.println("⚠️ No handler for chat " + chatId);
+                    System.out.println("No handler for chat " + chatId);
                 }
             }
         });
-        System.out.println("📡 Subscribed to " + topic);
+        System.out.println("Subscribed to " + topic);
     }
 
-    public void sendMessage(Long chatId, String content) {
+    public void sendMessage(Long chatId, String content, String token) {
         if (stompSession == null || !stompSession.isConnected()) {
             throw new IllegalStateException("Not connected yet");
         }
@@ -127,6 +129,8 @@ public class WebSocketClient {
 
         StompHeaders headers = new StompHeaders();
         headers.setDestination("/app/chat/" + chatId + "/send");
+        headers.add("Authorization", "Bearer " + token);
+
 
         stompSession.send(headers, message);
     }

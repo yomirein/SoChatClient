@@ -31,6 +31,13 @@ public class ChatController {
         return chatList1;
     }
 
+    public Chat createChat(ChatService chatService, Long userId) {
+        Chat chat = chatService.createChat(userId, token);
+        System.out.println(chat.toString() + " created");
+        return chat;
+    }
+
+
     public List<MessageListItem> getChatMessages(ChatService chatService, Long chatId, MessageList messageList) {
         List<Message> messages = chatService.getMessages(chatId, token);
         List<MessageListItem> items = new ArrayList<>(messageList.getItems());
@@ -42,17 +49,17 @@ public class ChatController {
         return items;
     }
 
-    public MessageList sendMessage(WebSocketClient webSocketClient, Long chatId, MessageList messageList, MessageInput messageInput) {
+    public List<MessageListItem> sendMessage(WebSocketClient webSocketClient, Long chatId, MessageList messageList, MessageInput messageInput) {
+        List<MessageListItem> items = new ArrayList<>(messageList.getItems());
         messageInput.addSubmitListener(submitEvent -> {
+            System.out.println("масаге отправляется");
             MessageListItem newMessage = new MessageListItem(
                     submitEvent.getValue(), Instant.now(), "username");
-            webSocketClient.sendMessage(chatId, submitEvent.getValue());
+            webSocketClient.sendMessage(chatId, submitEvent.getValue(), token);
             newMessage.setUserColorIndex(3);
-            List<MessageListItem> items = new ArrayList<>(messageList.getItems());
             items.add(newMessage);
-            messageList.setItems(items);
         });
-        return messageList;
+        return items;
     }
 
 
