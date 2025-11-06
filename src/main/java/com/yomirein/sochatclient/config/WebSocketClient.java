@@ -59,14 +59,9 @@ public class WebSocketClient {
         void onConnected(StompSession session);
     }
 
-    public CompletableFuture<StompSession> connect(String token) {
+    public CompletableFuture<StompSession> connect() {
         CompletableFuture<StompSession> future = new CompletableFuture<>();
-
-        StompHeaders connectHeaders = new StompHeaders();
-        connectHeaders.add("Authorization", "Bearer " + token);
-        System.out.println("Connecting with token: " + token.substring(0, Math.min(10, token.length())) + "...");
-
-        stompClient.connectAsync(wsUrl, new WebSocketHttpHeaders(), connectHeaders, new StompSessionHandlerAdapter() {
+        stompClient.connectAsync(wsUrl, new WebSocketHttpHeaders(), new StompHeaders(), new StompSessionHandlerAdapter() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
                 System.out.println("Connected to WS successfully");
@@ -92,7 +87,7 @@ public class WebSocketClient {
     }
 
 
-    public StompSession.Subscription subscribeToChat(Long chatId, String token, Consumer<Message> handler) {
+    public StompSession.Subscription subscribeToChat(Long chatId, Consumer<Message> handler) {
         if (stompSession == null || !stompSession.isConnected()) {
             throw new IllegalStateException("Not connected to WS");
         }
@@ -101,7 +96,6 @@ public class WebSocketClient {
         chatHandlers.put(chatId, handler);
 
         StompHeaders headers = new StompHeaders();
-        headers.add("Authorization", "Bearer " + token);
         headers.setDestination(topic);
 
         StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
@@ -127,7 +121,7 @@ public class WebSocketClient {
         return subscription;
     }
 
-    public void sendMessage(Long chatId, String content, String token) {
+    public void sendMessage(Long chatId, String content) {
         if (stompSession == null || !stompSession.isConnected()) {
             throw new IllegalStateException("Not connected yet");
         }
@@ -142,7 +136,6 @@ public class WebSocketClient {
 
         StompHeaders headers = new StompHeaders();
         headers.setDestination("/app/chat/" + chatId + "/send");
-        headers.add("Authorization", "Bearer " + token);
 
 
         stompSession.send(headers, message);

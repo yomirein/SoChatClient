@@ -1,49 +1,97 @@
 package com.yomirein.sochatclient.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yomirein.sochatclient.model.Request;
 import com.yomirein.sochatclient.model.Response;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.cookie.BasicCookieStore;
+import org.apache.hc.client5.http.cookie.CookieStore;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Map;
-
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final String baseUrl = "http://localhost:8080/api/auth";
 
     @Getter
-    private String token;
+    private final RestTemplate rest;
 
-    public Response.Auth register(String username, String password) {
-        var body = Map.of("username", username, "password", password);
-        ResponseEntity<Response.Auth> response =
-                restTemplate.postForEntity(baseUrl + "/register", body, Response.Auth.class);
+    private final String baseUrl = "http://localhost:8080/api/auth";
 
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            this.token = response.getBody().getToken();
-            return response.getBody();
-        }
-        return response.getBody();
+    // Хранилище cookie (автоматически сохраняет AUTH_TOKEN)
+
+    public AuthService() {
+        CookieStore cookieStore = new BasicCookieStore();
+
+        CloseableHttpClient client = HttpClients.custom()
+                .setDefaultCookieStore(cookieStore)
+                .build();
+
+        this.rest = new RestTemplate(new HttpComponentsClientHttpRequestFactory(client));
     }
 
-
+    /**
+     * Login пользователя
+     */
     public Response.Auth login(String username, String password) {
-        var body = Map.of("username", username, "password", password);
-        ResponseEntity<Response.Auth> response = restTemplate.postForEntity(baseUrl + "/login", body, Response.Auth.class);
+        Request.Auth request = new Request.Auth(username, password);
 
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            this.token = response.getBody().getToken();
-            return response.getBody();
-        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Request.Auth> entity = new HttpEntity<>(request, headers);
+
+        ResponseEntity<Response.Auth> response = rest.exchange(
+                baseUrl + "/login",
+                HttpMethod.POST,
+                entity,
+                Response.Auth.class
+        );
+        // cookie автоматически сохранится в cookieStore
         return response.getBody();
     }
 
+    /**
+     * Регистрация пользователя
+     */
+    public Response.Auth register(String username, String password) {
+        Request.Auth request = new Request.Auth(username, password);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Request.Auth> entity = new HttpEntity<>(request, headers);
+
+        ResponseEntity<Response.Auth> response = rest.exchange(
+                baseUrl + "/register",
+                HttpMethod.POST,
+                entity,
+                Response.Auth.class
+        );
+
+        return response.getBody();
+    }
+
+    /**
+     * Проверка валидности токена через сервер
+     * cookie отправляется автоматически
+     */
+    public boolean isTokenValid(String token) {
+        try {
+            ResponseEntity<Boolean> response = rest.exchange(
+                    "http://localhost:8080/api/auth/validate",
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders() {{
+                        setBearerAuth(token);
+                    }}),
+                    Boolean.class
+            );
+
+            return Boolean.TRUE.equals(response.getBody());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

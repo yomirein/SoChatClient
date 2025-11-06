@@ -14,14 +14,20 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.page.Push;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinService;
 import com.vaadin.flow.server.VaadinSession;
 import com.yomirein.sochatclient.config.WebSocketClient;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
 import com.yomirein.sochatclient.model.User;
+import com.yomirein.sochatclient.service.AuthService;
 import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.controllers.ChatController;
+import jakarta.servlet.http.Cookie;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.simp.stomp.StompSession;
 
@@ -38,7 +44,7 @@ import java.util.concurrent.ExecutionException;
 
 
 @Route("chat")
-public class ChatView extends VerticalLayout {
+public class ChatView extends VerticalLayout implements BeforeEnterObserver {
 
     private Long selectedChat = null;
     private MessageInput messageInput = new MessageInput();
@@ -52,13 +58,15 @@ public class ChatView extends VerticalLayout {
     ChatMessagingView chatMessagingView = new ChatMessagingView(messageList, messageInput);
     WebSocketClient webSocketClient = new WebSocketClient();
     ChatService chatService = new ChatService();
+    private final AuthService authService;
 
-    public ChatView() {
+    @Autowired
+    public ChatView(AuthService authService) {
+        this.authService = authService;
         UI ui = UI.getCurrent();
 
         User user = VaadinSession.getCurrent().getAttribute(User.class);
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-        if (user == null || token == null) {
+        if (user == null) {
             System.out.println("nope");
             UI.getCurrent().getPage().setLocation("/login");
         }
@@ -68,14 +76,33 @@ public class ChatView extends VerticalLayout {
         setSpacing(false);
         addClassName("root-host");
 
-        chatController = new ChatController(token);
+        chatController = new ChatController();
 
         ChatHeaderView chatHeaderView = new ChatHeaderView();
         ChatMainView chatMainView = new ChatMainView(chatListView, chatMessagingView);
 
-        chatController.initializeConnection(chatService, webSocketClient, messageList, messageInput, ui, user, chatList, token);
+        chatController.initializeConnection(chatService, webSocketClient, messageList, messageInput, ui, user, chatList);
 
         add(/*new H3(user.toString()),*/ chatHeaderView, chatMainView);
+    }
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        // 1️⃣ Проверяем наличие токена в cookie
+        String token = null;
+        Cookie[] cookies = VaadinService.getCurrentRequest().getCookies();
+        if (cookies != null) {
+            for (Cookie c : cookies) {
+                if ("AUTH_TOKEN".equals(c.getName())) {
+                    token = c.getValue();
+                    break;
+                }
+            }
+        }
+
+        // 2️⃣ Проверяем валидность токена через AuthService
+        if (token == null || !authService.isTokenValid(token)) {
+            event.forwardTo(LoginView.class);
+        }
     }
 
     public class ChatHeaderView extends HorizontalLayout {

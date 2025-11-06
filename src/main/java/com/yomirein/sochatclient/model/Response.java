@@ -16,7 +16,6 @@ public class Response {
     @Getter
     public static class Auth {
         private String message;
-        private String token;
         private User user;
     }
 

@@ -34,8 +34,6 @@ import java.util.concurrent.Executors;
 
 public class ChatController {
 
-    private String token;
-
     @Getter
     @Setter
     private final Map<Long, StompSession.Subscription> subscriptions = new HashMap<>();
@@ -44,27 +42,27 @@ public class ChatController {
     @Setter
     private Long selectedChat = null;
 
-    public ChatController(String token) {
-        this.token = token;
+    public ChatController() {
+
     }
 
     public List<Chat> getAllChats(ChatService chatService, Long id) {
-        List<Chat> chatList1 = chatService.getChats(id, token);
+        List<Chat> chatList1 = chatService.getChats(id);
         return chatList1;
     }
 
     public Chat createChat(ChatService chatService, Long userId) {
-        Chat chat = chatService.createChat(userId, token);
+        Chat chat = chatService.createChat(userId);
         System.out.println(chat.toString() + " created");
         return chat;
     }
 
 
     public List<MessageListItem> getChatMessages(ChatService chatService, Long chatId, MessageList messageList) {
-        List<Message> messages = chatService.getMessages(chatId, token);
+        List<Message> messages = chatService.getMessages(chatId);
         List<MessageListItem> items = new ArrayList<>(messageList.getItems());
         for (Message message : messages){
-            User user = chatService.getUser(message.getSenderId(), token);
+            User user = chatService.getUser(message.getSenderId());
             ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(message.getTimestamp());
             items.add(new MessageListItem(message.getContent(), message.getTimestamp().toInstant(zoneOffset), user.getUsername()));
         }
@@ -74,7 +72,7 @@ public class ChatController {
     public List<MessageListItem> sendMessage(WebSocketClient webSocketClient, Long chatId, MessageList messageList, MessageInput messageInput) {
         List<MessageListItem> items = new ArrayList<>(messageList.getItems());
         messageInput.addSubmitListener(submitEvent -> {
-            webSocketClient.sendMessage(chatId, submitEvent.getValue(), token);
+            webSocketClient.sendMessage(chatId, submitEvent.getValue());
             System.out.println("масаге отправляется");
             MessageListItem newMessage = new MessageListItem(
                     submitEvent.getValue(), Instant.now(), "username");
@@ -90,19 +88,18 @@ public class ChatController {
                                      MessageInput messageInput,
                                      UI ui,
                                      User user,
-                                     Div chatList,
-                                     String token) {
+                                     Div chatList) {
 
-        webSocketClient.connect(token).thenAccept(session -> {
+        webSocketClient.connect().thenAccept(session -> {
             System.out.println("[LOG] Connected to WebSocket!");
 
             CompletableFuture.supplyAsync(() -> {
-                        var chatLList = chatService.getChats(user.getId(), token);
+                        var chatLList = chatService.getChats(user.getId());
                         List<User> chatParticipants = new ArrayList<>();
                         for (Chat chat : chatLList){
                             for (Long userId :chat.getParticipants()){
                                 if (!chatParticipants.contains(userId)) {
-                                    chatParticipants.add(chatService.getUser(userId, token));
+                                    chatParticipants.add(chatService.getUser(userId));
                                 }
                             }
                         }
@@ -133,7 +130,7 @@ public class ChatController {
 
                             Button btn = new ChatView.userInList(chat.getId(), chatName);
                             btn.addClickListener(event ->
-                                    openChat(chatService, webSocketClient, messageList, ui, token, chat.getId())
+                                    openChat(chatService, webSocketClient, messageList, ui, chat.getId())
                             );
                             chatList.add(btn);
                         }
@@ -146,7 +143,7 @@ public class ChatController {
                     });
 
             // Инициализация отправки сообщений
-            setMessageSending(webSocketClient, messageList, messageInput, ui, token);
+            setMessageSending(webSocketClient, messageList, messageInput, ui);
 
         }).exceptionally(ex -> {
             System.err.println("[ERROR] Failed to connect to WebSocket: " + ex.getMessage());
@@ -159,14 +156,13 @@ public class ChatController {
                          WebSocketClient webSocketClient,
                          MessageList messageList,
                          UI ui,
-                         String token,
                          Long chatId) {
 
         selectedChat = chatId;
         System.out.println("[LOG] Opening chat " + chatId);
 
         // 1️⃣ Загрузка истории сообщений
-        CompletableFuture.supplyAsync(() -> chatService.getMessages(chatId, token))
+        CompletableFuture.supplyAsync(() -> chatService.getMessages(chatId))
                 .thenAccept(messages -> ui.access(() -> {
                     if (!ui.isAttached()) {
                         System.out.println("[LOG] UI detached, skipping loading old messages");
@@ -175,7 +171,7 @@ public class ChatController {
 
                     List<MessageListItem> items = new ArrayList<>();
                     for (Message message : messages) {
-                        User msgSender = chatService.getUser(message.getSenderId(), token);
+                        User msgSender = chatService.getUser(message.getSenderId());
 
                         char firstChar = msgSender.getUsername().charAt(0);
                         int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
@@ -207,12 +203,12 @@ public class ChatController {
 
         // 3️⃣ Подписка на обновления через WebSocket
         Thread.startVirtualThread(() -> {
-            StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, token, msg -> {
+            StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, msg -> {
                 System.out.println("[LOG] WebSocket message received: " + msg.getContent());
 
                 Thread.startVirtualThread(() -> {
                     try {
-                        User msgSender = chatService.getUser(msg.getSenderId(), token);
+                        User msgSender = chatService.getUser(msg.getSenderId());
 
                         ui.access(() -> {
                             if (!ui.isAttached()) {
@@ -263,8 +259,7 @@ public class ChatController {
     public void setMessageSending(WebSocketClient webSocketClient,
                                   MessageList messageList,
                                   MessageInput messageInput,
-                                  UI ui,
-                                  String token) {
+                                  UI ui) {
 
         ui.access(() -> messageInput.addSubmitListener(submitEvent -> {
             String content = submitEvent.getValue();
@@ -273,7 +268,7 @@ public class ChatController {
             Thread.startVirtualThread(() -> {
                 try {
                     // Отправляем сообщение через WebSocket
-                    webSocketClient.sendMessage(selectedChat, content, token);
+                    webSocketClient.sendMessage(selectedChat, content);
                     System.out.println("[LOG] Message sent to chat " + selectedChat + ": " + content);
 
                     // Добавляем сообщение сразу в UI

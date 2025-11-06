@@ -20,33 +20,20 @@ public class ChatService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final String baseUrl = "http://localhost:8080/chat";
 
-    public List<Message> getMessages(Long chatId, String token) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        ResponseEntity<Message[]> response = restTemplate.exchange(
+    public List<Message> getMessages(Long chatId) {
+        ResponseEntity<Message[]> response = restTemplate.getForEntity(
                 baseUrl + "/" + chatId + "/allmessages",
-                HttpMethod.GET,
-                entity,
                 Message[].class
         );
 
         return Arrays.asList(response.getBody());
     }
 
-    public List<Chat> getChats(Long userId, String token) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        ResponseEntity<Chat[]> response = restTemplate.exchange(
+    public List<Chat> getChats(Long userId) {
+        ResponseEntity<Chat[]> response = restTemplate.getForEntity(
                 baseUrl + "/user/chats/" + userId,
-                HttpMethod.GET,
-                entity,
                 Chat[].class
         );
-
         Chat[] chatsArray = response.getBody();
         if (chatsArray == null) {
             return Collections.emptyList();
@@ -54,30 +41,18 @@ public class ChatService {
         return Arrays.asList(chatsArray);
     }
 
-    public List<Message> getLastMessages(Long chatId, String token) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        ResponseEntity<Message[]> response = restTemplate.exchange(
+    public List<Message> getLastMessages(Long chatId) {
+        ResponseEntity<Message[]> response = restTemplate.getForEntity(
                 baseUrl + "/" + chatId + "/messages",
-                HttpMethod.GET,
-                entity,
                 Message[].class
         );
 
         return Arrays.asList(response.getBody());
     }
 
-    public User getUser(Long userId, String token) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        ResponseEntity<User> response = restTemplate.exchange(
+    public User getUser(Long userId) {
+        ResponseEntity<User> response = restTemplate.getForEntity(
                 baseUrl + "/user/" + userId,
-                HttpMethod.GET,
-                entity,
                 User.class
         );
 
@@ -88,19 +63,11 @@ public class ChatService {
         return user;
     }
 
-    public Chat createChat(Long userId2, String token) {
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
-
+    public Chat createChat(Long userId2) {
         String url = baseUrl + "/create?user2Id=" + userId2;
 
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-
-        ResponseEntity<Chat> response = restTemplate.exchange(
+        ResponseEntity<Chat> response = restTemplate.getForEntity(
                 url,
-                HttpMethod.POST,
-                entity,
                 Chat.class
         );
 
