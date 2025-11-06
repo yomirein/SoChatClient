@@ -13,6 +13,7 @@ import com.vaadin.flow.component.messages.MessageListItem;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.page.Push;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.yomirein.sochatclient.config.WebSocketClient;
@@ -21,6 +22,7 @@ import com.yomirein.sochatclient.model.Message;
 import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.controllers.ChatController;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.simp.stomp.StompSession;
 
 import java.time.Instant;
@@ -33,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
 
 @Route("chat")
 public class ChatView extends VerticalLayout {
@@ -48,8 +51,9 @@ public class ChatView extends VerticalLayout {
     ChatListView chatListView = new ChatListView(chatList);
     ChatMessagingView chatMessagingView = new ChatMessagingView(messageList, messageInput);
     WebSocketClient webSocketClient = new WebSocketClient();
+    ChatService chatService = new ChatService();
 
-    public ChatView(ChatService chatService) {
+    public ChatView() {
         UI ui = UI.getCurrent();
 
         User user = VaadinSession.getCurrent().getAttribute(User.class);
@@ -69,58 +73,9 @@ public class ChatView extends VerticalLayout {
         ChatHeaderView chatHeaderView = new ChatHeaderView();
         ChatMainView chatMainView = new ChatMainView(chatListView, chatMessagingView);
 
-        Button testCreateChatButton = new Button("Create Chat");
-        testCreateChatButton.addClickListener(event -> {
-            chatController.createChat(chatService, 2L);
-        });
+        chatController.initializeConnection(chatService, webSocketClient, messageList, messageInput, ui, user, chatList, token);
 
-        add(new H3(user.toString()), testCreateChatButton, chatHeaderView, chatMainView);
-
-        initChatUI(chatService, token, user);
-    }
-
-
-
-    private void subscribeToUserChat(ChatService chatService, Long chatId, String token, UI ui) {
-        System.out.println("Subcribing to chat " + 1);
-        webSocketClient.subscribeToChat(1L, token, msg -> {
-            ui.access(() -> {
-                List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-
-                User userSender = chatService.getUser(msg.getSenderId(), token);
-
-                items.add(new MessageListItem(msg.getContent(), Instant.now(), userSender.getUsername()));
-                messageList.setItems(items);
-                System.out.println("Received message in chat " + 1 + ": " + msg.getContent());
-            });
-        });
-    }
-
-    private void initChatUI(ChatService chatService, String token, User user) {
-        // 1️⃣ Подключаемся к WebSocket
-        webSocketClient.connect(token).thenAccept(session -> {
-            System.out.println("[LOG] Connected to WebSocket!");
-
-            // 2️⃣ Загружаем все чаты асинхронно
-            CompletableFuture.supplyAsync(() -> chatService.getChats(user.getId(), token))
-                    .thenAccept(chats -> getUI().ifPresent(ui -> ui.access(() -> {
-                        for (Chat chat : chats) {
-                            Button btn = new userInList(chat.getId(), chat.getName());
-                            btn.addClickListener(event -> {
-                                chatController.openChat(chat.getId(), chatService, webSocketClient, messageList, ui, token);
-                            });
-                            chatList.add(btn);
-                        }
-                    })))
-                    .exceptionally(ex -> { ex.printStackTrace(); return null; });
-
-            // 3️⃣ Настраиваем отправку сообщений
-            getUI().ifPresent(ui -> chatController.setupMessageSending(webSocketClient, messageList, messageInput, ui, token, user.getUsername()));
-
-        }).exceptionally(ex -> {
-            ex.printStackTrace();
-            return null;
-        });
+        add(/*new H3(user.toString()),*/ chatHeaderView, chatMainView);
     }
 
     public class ChatHeaderView extends HorizontalLayout {
@@ -131,7 +86,7 @@ public class ChatView extends VerticalLayout {
             setPadding(true);
             setSpacing(true);
 
-            H1 title = new H1("SoChat");
+            H1 title = new H1("");
             title.addClassName("app-title");
             Button action = new Button("Log out");
             action.addClassName("app-action");

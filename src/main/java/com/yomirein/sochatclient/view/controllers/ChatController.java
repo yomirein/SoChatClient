@@ -1,18 +1,22 @@
 package com.yomirein.sochatclient.view.controllers;
 
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.avatar.Avatar;
+import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
 import com.yomirein.sochatclient.config.WebSocketClient;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
+import com.yomirein.sochatclient.model.Response;
 import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.ChatView;
 import com.vaadin.flow.component.html.Div;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompSession;
 
@@ -39,9 +43,6 @@ public class ChatController {
     @Getter
     @Setter
     private Long selectedChat = null;
-
-    private final ExecutorService sendExecutor = Executors.newFixedThreadPool(2);
-
 
     public ChatController(String token) {
         this.token = token;
@@ -83,68 +84,212 @@ public class ChatController {
         return items;
     }
 
-    public void openChat(Long chatId, ChatService chatService,
+    public void initializeConnection(ChatService chatService,
+                                     WebSocketClient webSocketClient,
+                                     MessageList messageList,
+                                     MessageInput messageInput,
+                                     UI ui,
+                                     User user,
+                                     Div chatList,
+                                     String token) {
+
+        webSocketClient.connect(token).thenAccept(session -> {
+            System.out.println("[LOG] Connected to WebSocket!");
+
+            CompletableFuture.supplyAsync(() -> {
+                        var chatLList = chatService.getChats(user.getId(), token);
+                        List<User> chatParticipants = new ArrayList<>();
+                        for (Chat chat : chatLList){
+                            for (Long userId :chat.getParticipants()){
+                                if (!chatParticipants.contains(userId)) {
+                                    chatParticipants.add(chatService.getUser(userId, token));
+                                }
+                            }
+                        }
+                        return new Response.ChatWithExtras(chatLList, chatParticipants);
+                    })
+                    .thenAccept(chats -> ui.access(() -> {
+                        if (!ui.isAttached()) {
+                            System.out.println("[LOG] UI detached, skipping chat list update");
+                            return;
+                        }
+                        chatList.removeAll();
+
+                        for (Chat chat : chats.getChats()) {
+                            String chatName = "";
+                            if (!chat.isGroup()) {
+                                for (User user1 : chats.getUsers()) {
+                                    if (chat.getParticipants().contains(user1.getId())) {
+                                        System.out.println("[LOG] User " + user1.getUsername() + " is part of chat " + chat.getId());
+                                        if (user1.getId() != user.getId()) {
+                                            chatName = user1.getUsername();
+                                            System.out.println("[LOG] User " + user.getUsername() + " using name " + user1.toString() + " in chat " + chat.toString());
+                                        }
+                                    }
+                                }
+                            } else{
+                                chatName = chat.getName();
+                            }
+
+                            Button btn = new ChatView.userInList(chat.getId(), chatName);
+                            btn.addClickListener(event ->
+                                    openChat(chatService, webSocketClient, messageList, ui, token, chat.getId())
+                            );
+                            chatList.add(btn);
+                        }
+
+                        ui.push(); // 🔥 обновляем список чатов на клиенте сразу
+                    }))
+                    .exceptionally(ex -> {
+                        ex.printStackTrace();
+                        return null;
+                    });
+
+            // Инициализация отправки сообщений
+            setMessageSending(webSocketClient, messageList, messageInput, ui, token);
+
+        }).exceptionally(ex -> {
+            System.err.println("[ERROR] Failed to connect to WebSocket: " + ex.getMessage());
+            ex.printStackTrace();
+            return null;
+        });
+    }
+
+    public void openChat(ChatService chatService,
                          WebSocketClient webSocketClient,
                          MessageList messageList,
                          UI ui,
-                         String token) {
+                         String token,
+                         Long chatId) {
 
         selectedChat = chatId;
+        System.out.println("[LOG] Opening chat " + chatId);
 
-        // Подписка на чат
-        StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, token, msg -> {
-            System.out.println("[LOG] WebSocket message received: " + msg.getContent());
+        // 1️⃣ Загрузка истории сообщений
+        CompletableFuture.supplyAsync(() -> chatService.getMessages(chatId, token))
+                .thenAccept(messages -> ui.access(() -> {
+                    if (!ui.isAttached()) {
+                        System.out.println("[LOG] UI detached, skipping loading old messages");
+                        return;
+                    }
 
-            CompletableFuture.supplyAsync(() -> chatService.getUser(msg.getSenderId(), token))
-                    .thenAccept(userSender -> {
+                    List<MessageListItem> items = new ArrayList<>();
+                    for (Message message : messages) {
+                        User msgSender = chatService.getUser(message.getSenderId(), token);
+
+                        char firstChar = msgSender.getUsername().charAt(0);
+                        int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
+
+                        MessageListItem item = new MessageListItem();
+                        item.setText(message.getContent());
+                        item.setTime(message.getTimestamp().toInstant(ZoneOffset.UTC));
+                        item.setUserName(msgSender.getUsername());
+
+                        item.setUserAbbreviation(msgSender.getUsername().substring(0, 1)); // первая буква имени
+                        item.setUserColorIndex(colorIndex);
+
+                        items.add(item);
+                    }
+                    messageList.setItems(items);
+                    ui.push(); // 🔥 сразу обновляем браузер
+                    System.out.println("[LOG] Loaded " + items.size() + " old messages.");
+                }))
+                .exceptionally(ex -> {
+                    ex.printStackTrace();
+                    return null;
+                });
+
+        // 2️⃣ Проверка на уже существующую подписку
+        if (subscriptions.containsKey(chatId)) {
+            System.out.println("[LOG] Already subscribed to chat " + chatId);
+            return;
+        }
+
+        // 3️⃣ Подписка на обновления через WebSocket
+        Thread.startVirtualThread(() -> {
+            StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, token, msg -> {
+                System.out.println("[LOG] WebSocket message received: " + msg.getContent());
+
+                Thread.startVirtualThread(() -> {
+                    try {
+                        User msgSender = chatService.getUser(msg.getSenderId(), token);
+
                         ui.access(() -> {
-                            List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-                            items.add(new MessageListItem(
-                                    msg.getContent(),
-                                    Instant.now(),
-                                    userSender.getUsername()
-                            ));
-                            messageList.setItems(items);
-                            System.out.println("[LOG] messageList updated, total messages: " + items.size());
-                        });
-                    })
-                    .exceptionally(ex -> { ex.printStackTrace(); return null; });
-        });
+                            if (!ui.isAttached()) {
+                                System.out.println("[LOG] UI detached, skipping message update");
+                                return;
+                            }
 
-        subscriptions.put(chatId, subscription);
-        System.out.println("[LOG] Subscribed to chat " + chatId);
+                            List<MessageListItem> items = new ArrayList<>(messageList.getItems());
+
+                            char firstChar = msgSender.getUsername().charAt(0);
+                            int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
+
+                            MessageListItem item = new MessageListItem();
+                            item.setText(msg.getContent());
+                            item.setTime(Instant.now());
+                            item.setUserName(msgSender.getUsername());
+
+                            item.setUserAbbreviation(msgSender.getUsername().substring(0, 1));
+                            item.setUserColorIndex(colorIndex);
+
+                            items.add(item);
+
+                            messageList.setItems(items);
+                            ui.push(); // 🔥 обновление на клиенте сразу
+                            System.out.println("[LOG] messageList updated, total: " + items.size());
+                        });
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+            });
+
+            subscriptions.put(chatId, subscription);
+            System.out.println("[LOG] Subscribed to chat " + chatId + " (virtual thread)");
+
+            // 4️⃣ Отписка при отсоединении UI
+            ui.addDetachListener(event -> {
+                StompSession.Subscription sub = subscriptions.get(chatId);
+                if (sub != null) {
+                    sub.unsubscribe();
+                    System.out.println("[LOG] Unsubscribed from chat " + chatId + " due to UI detach");
+                }
+            });
+        });
     }
 
-    // Настройка отправки сообщений
-    public void setupMessageSending(WebSocketClient webSocketClient,
-                                    MessageList messageList,
-                                    MessageInput messageInput,
-                                    UI ui,
-                                    String token,
-                                    String username) {
+
+    public void setMessageSending(WebSocketClient webSocketClient,
+                                  MessageList messageList,
+                                  MessageInput messageInput,
+                                  UI ui,
+                                  String token) {
 
         ui.access(() -> messageInput.addSubmitListener(submitEvent -> {
             String content = submitEvent.getValue();
             if (content == null || content.isBlank() || selectedChat == null) return;
 
-            // Асинхронная отправка через Executor
-            sendExecutor.submit(() -> {
+            Thread.startVirtualThread(() -> {
                 try {
-                    System.out.println("[LOG] Sending message asynchronously: " + content);
+                    // Отправляем сообщение через WebSocket
                     webSocketClient.sendMessage(selectedChat, content, token);
-                    System.out.println("[LOG] Message sent: " + content);
-                } catch (Exception ex) { ex.printStackTrace(); }
-                finally { System.out.println("[LOG] sendExecutor task finished for message: " + content); }
+                    System.out.println("[LOG] Message sent to chat " + selectedChat + ": " + content);
+
+                    // Добавляем сообщение сразу в UI
+                    ui.access(() -> {
+                        if (!ui.isAttached()) {
+                            System.out.println("[LOG] UI detached, skipping local message update");
+                            return;
+                        }
+                        ui.push(); // 🔥 мгновенное обновление UI
+                        System.out.println("[LOG] UI updated immediately after sending message.");
+                    });
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             });
-
-            // ❌ Не добавляем локальное сообщение в UI — оно придёт через WebSocket
         }));
-    }
-
-    // Отписка от всех чатов
-    public void unsubscribeAll() {
-        subscriptions.values().forEach(StompSession.Subscription::unsubscribe);
-        subscriptions.clear();
-        sendExecutor.shutdown();
     }
 }

@@ -1,3 +1,16 @@
+:root {
+    --vaadin-user-color-0: #e57373; /* красный */
+    --vaadin-user-color-1: #f06292; /* розовый */
+    --vaadin-user-color-2: #ba68c8; /* фиолетовый */
+    --vaadin-user-color-3: #64b5f6; /* голубой */
+    --vaadin-user-color-4: #4db6ac; /* бирюзовый */
+    --vaadin-user-color-5: #81c784; /* зелёный */
+    --vaadin-user-color-6: #dce775; /* лаймовый */
+    --vaadin-user-color-7: #ffd54f; /* жёлтый */
+    --vaadin-user-color-8: #ffb74d; /* оранжевый */
+    --vaadin-user-color-9: #a1887f; /* коричневый */
+}
+
 html, body, #outlet {
     height: 100%;
     margin: 0;

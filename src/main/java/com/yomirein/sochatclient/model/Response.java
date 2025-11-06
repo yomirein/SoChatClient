@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 
 public class Response {
 
@@ -16,5 +18,14 @@ public class Response {
         private String message;
         private String token;
         private User user;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Getter
+    public static class ChatWithExtras {
+        List<Chat> chats;
+        List<User> users;
     }
 }
