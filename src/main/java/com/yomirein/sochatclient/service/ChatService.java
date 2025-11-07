@@ -63,6 +63,17 @@ public class ChatService {
         return user;
     }
 
+    public String test(){
+        String url = baseUrl + "/test";
+
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url,
+                String.class
+        );
+
+        return response.getBody();
+    }
+
     public Chat createChat(Long userId2) {
         String url = baseUrl + "/create?user2Id=" + userId2;
 

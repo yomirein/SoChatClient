@@ -87,7 +87,8 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
     }
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        // 1️⃣ Проверяем наличие токена в cookie
+        System.out.println(chatService.test());
+
         String token = null;
         Cookie[] cookies = VaadinService.getCurrentRequest().getCookies();
         if (cookies != null) {
