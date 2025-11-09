@@ -3,13 +3,11 @@ package com.yomirein.sochatclient.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.yomirein.sochatclient.model.Message;
-import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.cookie.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.lang.Nullable;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
-import org.springframework.scheduling.concurrent.ConcurrentTaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -19,13 +17,10 @@ import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 
 import java.lang.reflect.Type;
-import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
-
+import java.util.stream.Collectors;
 
 
 @Component
@@ -39,7 +34,9 @@ public class WebSocketClient {
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
     private final String wsUrl = "http://localhost:8080/ws";
 
-    public WebSocketClient() {
+    String cookieHeader;
+
+    public WebSocketClient(List<Cookie> cookieList) {
         List<Transport> transports = List.of(
                 new WebSocketTransport(new StandardWebSocketClient()),
                 new RestTemplateXhrTransport()
@@ -47,6 +44,10 @@ public class WebSocketClient {
         SockJsClient sockJsClient = new SockJsClient(transports);
 
         this.stompClient = new WebSocketStompClient(sockJsClient);
+
+        cookieHeader = cookieList.stream()
+                .map(c -> c.getName() + "=" + c.getValue())
+                .collect(Collectors.joining("; "));
 
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
@@ -61,7 +62,14 @@ public class WebSocketClient {
 
     public CompletableFuture<StompSession> connect() {
         CompletableFuture<StompSession> future = new CompletableFuture<>();
-        stompClient.connectAsync(wsUrl, new WebSocketHttpHeaders(), new StompHeaders(), new StompSessionHandlerAdapter() {
+
+        WebSocketHttpHeaders httpHeaders = new WebSocketHttpHeaders();
+        StompHeaders stompHeaders = new StompHeaders();
+
+        stompHeaders.add("cookie", cookieHeader);
+        httpHeaders.add("cookie", cookieHeader);
+
+        stompClient.connectAsync(wsUrl, httpHeaders, stompHeaders, new StompSessionHandlerAdapter() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
                 System.out.println("Connected to WS successfully");
@@ -96,6 +104,7 @@ public class WebSocketClient {
         chatHandlers.put(chatId, handler);
 
         StompHeaders headers = new StompHeaders();
+        headers.add("cookie", cookieHeader);
         headers.setDestination(topic);
 
         StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
@@ -135,6 +144,7 @@ public class WebSocketClient {
 
 
         StompHeaders headers = new StompHeaders();
+        headers.add("cookie", cookieHeader);
         headers.setDestination("/app/chat/" + chatId + "/send");
 
 

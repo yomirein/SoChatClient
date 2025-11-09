@@ -16,9 +16,17 @@ import java.util.Map;
 
 @Service
 public class ChatService {
-    private final RestTemplate restTemplate = new RestTemplate();
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final String baseUrl = "http://localhost:8080/chat";
+    private final AuthService authService;
+    private final RestTemplate restTemplate;
+
+    public ChatService(AuthService authService) {
+        this.authService = authService;
+        this.restTemplate = authService.getRest();
+    }
+
 
     public List<Message> getMessages(Long chatId) {
         ResponseEntity<Message[]> response = restTemplate.getForEntity(
@@ -61,17 +69,6 @@ public class ChatService {
             return null;
         }
         return user;
-    }
-
-    public String test(){
-        String url = baseUrl + "/test";
-
-        ResponseEntity<String> response = restTemplate.getForEntity(
-                url,
-                String.class
-        );
-
-        return response.getBody();
     }
 
     public Chat createChat(Long userId2) {

@@ -1,7 +1,6 @@
 package com.yomirein.sochatclient.view;
 
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.login.LoginForm;
 import com.vaadin.flow.component.login.LoginI18n;
 import com.vaadin.flow.component.notification.Notification;
@@ -14,7 +13,7 @@ import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 
-@Route("registerr")
+@Route("register")
 public class RegisterView extends VerticalLayout {
     @Autowired
     public RegisterView(AuthService authService) {

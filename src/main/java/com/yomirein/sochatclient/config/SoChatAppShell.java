@@ -11,5 +11,4 @@ import com.vaadin.flow.theme.Theme;
 @Theme("my-theme")
 @Viewport("width=device-width, minimum-scale=1.0, initial-scale=1.0, user-scalable=yes")
 public class SoChatAppShell implements AppShellConfigurator {
-    // Можно оставить пустым, Vaadin просто использует аннотации
 }

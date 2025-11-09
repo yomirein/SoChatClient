@@ -2,112 +2,61 @@ package com.yomirein.sochatclient.view;
 
 
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
-import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.router.BeforeEnterEvent;
-import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
-import com.yomirein.sochatclient.config.WebSocketClient;
-import com.yomirein.sochatclient.model.User;
-import com.yomirein.sochatclient.service.AuthService;
-import com.yomirein.sochatclient.service.ChatService;
-import com.yomirein.sochatclient.view.controllers.ChatController;
-import org.apache.hc.client5.http.cookie.Cookie;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.stomp.StompSession;
 
 import java.util.ArrayList;
 import java.util.List;
 
-
-@Route("chat")
-public class ChatView extends VerticalLayout implements BeforeEnterObserver {
-
-    private Long selectedChat = null;
+@Route("chatDesignTest")
+public class ChatViewDesignTest extends VerticalLayout{
     private MessageInput messageInput = new MessageInput();
     private MessageList messageList = new MessageList();
     public Div chatList = new Div();
     public List<userInList> userList = new ArrayList<>();
     private StompSession.Subscription currentSubscription;
 
-    ChatController chatController;
     ChatListView chatListView = new ChatListView(chatList);
     ChatMessagingView chatMessagingView = new ChatMessagingView(messageList, messageInput);
-    ChatService chatService;
-    WebSocketClient webSocketClient;
-    private final AuthService authService;
 
-    @Autowired
-    public ChatView(AuthService authServiceDang) {
-        this.authService = authServiceDang;
-        chatService = new ChatService(authService);
-        webSocketClient = new WebSocketClient(authService.getCookieStore().getCookies());
-
-
+    public ChatViewDesignTest() {
         UI ui = UI.getCurrent();
-
-        User user = VaadinSession.getCurrent().getAttribute(User.class);
-        if (user == null) {
-            System.out.println("nope");
-            UI.getCurrent().getPage().setLocation("/login");
-        }
 
         setSizeFull();
         setPadding(false);
         setSpacing(false);
         addClassName("root-host");
 
-        chatController = new ChatController();
-
         ChatHeaderView chatHeaderView = new ChatHeaderView();
         ChatMainView chatMainView = new ChatMainView(chatListView, chatMessagingView);
 
-        chatController.initializeConnection(chatService, webSocketClient, messageList, messageInput, ui, user, chatList);
-
-        add(/*new H3(user.toString()),*/ chatHeaderView, chatMainView);
-    }
-    @Override
-    public void beforeEnter(BeforeEnterEvent event) {
-
-        String token = null;
-        if (authService.getCookieStore().getCookies() != null) {
-            for (Cookie c : authService.getCookieStore().getCookies()) {
-                if ("AUTH_TOKEN".equals(c.getName())) {
-                    System.out.println("AUTH_TOKEN");
-                    System.out.println(c.getValue());
-                    token = c.getValue();
-                    break;
-                }
-            }
-        }
-        if (token == null || !authService.isTokenValid(token)) {
-            event.forwardTo(LoginView.class);
-        }
+        add(chatHeaderView, chatMainView);
     }
 
     public class ChatHeaderView extends HorizontalLayout {
         public ChatHeaderView() {
             addClassName("app-header");
             setWidthFull();
-            setAlignItems(FlexComponent.Alignment.CENTER);
+            setAlignItems(Alignment.CENTER);
             setPadding(true);
             setSpacing(true);
 
-            H1 title = new H1("");
-            title.addClassName("app-title");
-            Button action = new Button("Log out");
-            action.addClassName("app-action");
+            Button logOutButton = new Button("Log out");
+            logOutButton.addClassName("app-action");
 
-            add(title, action);
-            expand(title);
+            Button friendListButton = new Button("Friends");
+            friendListButton.addClassName("left-header-buttons");
+
+            add(friendListButton, logOutButton);
         }
     }
 
@@ -132,9 +81,17 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
             setSpacing(true);
             setSizeFull();
 
-            H2 listTitle = new H2("Chat     list");
+            H2 listTitle = new H2("Friends");
             listTitle.addClassName("list-title");
 
+            list.setWidth("100%");
+
+            Button btn = new userInList(1l, "UserNameTEST");
+            list.add(btn);
+            Button btn2 = new userInList(2l, "UserNameTEST2");
+            list.add(btn2);
+            Button btn3 = new userInList(3l, "user");
+            list.add(btn3);
             add(listTitle, list);
         }
     }
@@ -156,18 +113,24 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
         }
     }
 
-    public static class userInList extends Button {
+    public class userInList extends Button {
         Long id;
         String name;
         public userInList(Long id, String name) {
             this.id = id;
             this.name = name;
 
-            setWidth("10");
-            setHeight("10");
+            Avatar avatar = new Avatar(name);
+            avatar.setWidth("32px");
+            avatar.setHeight("32px");
 
+            Span label = new Span(name);
+
+            setSpacing("true");
             addClassName("item");
-            setText(name);
+            setWidthFull();
+            getElement().removeAllChildren();
+            getElement().appendChild(avatar.getElement(), label.getElement());
         }
     }
 }

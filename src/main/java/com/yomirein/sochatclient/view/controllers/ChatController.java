@@ -135,14 +135,13 @@ public class ChatController {
                             chatList.add(btn);
                         }
 
-                        ui.push(); // 🔥 обновляем список чатов на клиенте сразу
+                        ui.push();
                     }))
                     .exceptionally(ex -> {
                         ex.printStackTrace();
                         return null;
                     });
 
-            // Инициализация отправки сообщений
             setMessageSending(webSocketClient, messageList, messageInput, ui);
 
         }).exceptionally(ex -> {
@@ -161,7 +160,6 @@ public class ChatController {
         selectedChat = chatId;
         System.out.println("[LOG] Opening chat " + chatId);
 
-        // 1️⃣ Загрузка истории сообщений
         CompletableFuture.supplyAsync(() -> chatService.getMessages(chatId))
                 .thenAccept(messages -> ui.access(() -> {
                     if (!ui.isAttached()) {
@@ -195,13 +193,11 @@ public class ChatController {
                     return null;
                 });
 
-        // 2️⃣ Проверка на уже существующую подписку
         if (subscriptions.containsKey(chatId)) {
             System.out.println("[LOG] Already subscribed to chat " + chatId);
             return;
         }
 
-        // 3️⃣ Подписка на обновления через WebSocket
         Thread.startVirtualThread(() -> {
             StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, msg -> {
                 System.out.println("[LOG] WebSocket message received: " + msg.getContent());
@@ -232,7 +228,7 @@ public class ChatController {
                             items.add(item);
 
                             messageList.setItems(items);
-                            ui.push(); // 🔥 обновление на клиенте сразу
+                            ui.push();
                             System.out.println("[LOG] messageList updated, total: " + items.size());
                         });
                     } catch (Exception e) {
@@ -244,7 +240,6 @@ public class ChatController {
             subscriptions.put(chatId, subscription);
             System.out.println("[LOG] Subscribed to chat " + chatId + " (virtual thread)");
 
-            // 4️⃣ Отписка при отсоединении UI
             ui.addDetachListener(event -> {
                 StompSession.Subscription sub = subscriptions.get(chatId);
                 if (sub != null) {
@@ -267,17 +262,15 @@ public class ChatController {
 
             Thread.startVirtualThread(() -> {
                 try {
-                    // Отправляем сообщение через WebSocket
                     webSocketClient.sendMessage(selectedChat, content);
                     System.out.println("[LOG] Message sent to chat " + selectedChat + ": " + content);
 
-                    // Добавляем сообщение сразу в UI
                     ui.access(() -> {
                         if (!ui.isAttached()) {
                             System.out.println("[LOG] UI detached, skipping local message update");
                             return;
                         }
-                        ui.push(); // 🔥 мгновенное обновление UI
+                        ui.push();
                         System.out.println("[LOG] UI updated immediately after sending message.");
                     });
 
