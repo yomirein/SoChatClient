@@ -72,12 +72,14 @@ public class ChatService {
     }
 
     public Chat createChat(Long userId2) {
-        String url = baseUrl + "/create?user2Id=" + userId2;
+        String url = baseUrl + "/create";
 
-        ResponseEntity<Chat> response = restTemplate.getForEntity(
+        ResponseEntity<Chat> response = restTemplate.postForEntity(
                 url,
+                userId2,
                 Chat.class
         );
+
 
         System.out.println(response.getBody().toString());
 

@@ -2,15 +2,15 @@ package com.yomirein.sochatclient.view;
 
 
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H1;
-import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.Route;
@@ -34,12 +34,15 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
     private Long selectedChat = null;
     private MessageInput messageInput = new MessageInput();
     private MessageList messageList = new MessageList();
+
     public Div chatList = new Div();
+    public Div friendList = new Div();
+
     public List<userInList> userList = new ArrayList<>();
     private StompSession.Subscription currentSubscription;
 
     ChatController chatController;
-    ChatListView chatListView = new ChatListView(chatList);
+    SideListView sideListView = new SideListView();
     ChatMessagingView chatMessagingView = new ChatMessagingView(messageList, messageInput);
     ChatService chatService;
     WebSocketClient webSocketClient;
@@ -50,7 +53,6 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
         this.authService = authServiceDang;
         chatService = new ChatService(authService);
         webSocketClient = new WebSocketClient(authService.getCookieStore().getCookies());
-
 
         UI ui = UI.getCurrent();
 
@@ -68,11 +70,19 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
         chatController = new ChatController();
 
         ChatHeaderView chatHeaderView = new ChatHeaderView();
-        ChatMainView chatMainView = new ChatMainView(chatListView, chatMessagingView);
+        ChatMainView chatMainView = new ChatMainView(sideListView, chatMessagingView);
 
-        chatController.initializeConnection(chatService, webSocketClient, messageList, messageInput, ui, user, chatList);
+        chatHeaderView.dMSListButton.addClickListener(e -> {
+            sideListView.toDMSList();
+        });
+        chatHeaderView.friendListButton.addClickListener(e -> {
+            sideListView.toFriendsList();
+        });
 
-        add(/*new H3(user.toString()),*/ chatHeaderView, chatMainView);
+        chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, user,
+                chatHeaderView.logOutButton, chatList, friendList, sideListView.searchUserField, sideListView.addFriendButton);
+
+        add(new H3(user.toString() + " " + authServiceDang.cookieStore.getCookies()), chatHeaderView, chatMainView);
     }
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
@@ -94,25 +104,31 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     public class ChatHeaderView extends HorizontalLayout {
+        public Button dMSListButton = new Button("DMS");
+        public Button friendListButton = new Button("Friends");
+        public Button logOutButton = new Button("Log out");
+        public Div leftHeaderButtons = new Div();
+
         public ChatHeaderView() {
             addClassName("app-header");
             setWidthFull();
-            setAlignItems(FlexComponent.Alignment.CENTER);
+            setAlignItems(Alignment.CENTER);
             setPadding(true);
             setSpacing(true);
 
-            H1 title = new H1("");
-            title.addClassName("app-title");
-            Button action = new Button("Log out");
-            action.addClassName("app-action");
+            logOutButton.addClassName("app-action");
+            leftHeaderButtons.addClassName("left-header-items");
+            dMSListButton.addClassName("left-header-item");
+            friendListButton.addClassName("left-header-item");
+            leftHeaderButtons.add(dMSListButton, friendListButton);
 
-            add(title, action);
-            expand(title);
+
+            add(leftHeaderButtons, logOutButton);
         }
     }
 
     public class ChatMainView extends HorizontalLayout {
-        public ChatMainView(ChatListView chatList, ChatMessagingView chatMessaging) {
+        public ChatMainView(SideListView chatList, ChatMessagingView chatMessaging) {
             addClassName("main-layout");
             setSizeFull();
             setPadding(false);
@@ -125,17 +141,59 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
         }
     }
 
-    private class ChatListView extends VerticalLayout {
-        public ChatListView(Div list){
+    private class SideListView extends VerticalLayout {
+
+        H2 soChatName = new H2("SoChat");
+        H3 listTitle = new H3("DMS");
+
+        Div searchBox = new Div();
+
+        TextField searchUserField = new TextField();
+        Button addFriendButton = new Button("Add");
+
+        public SideListView() {
             addClassName("left-panel");
             setPadding(true);
             setSpacing(true);
             setSizeFull();
 
-            H2 listTitle = new H2("Chat     list");
+            chatList.setWidth("100%");
+            friendList.setWidth("100%");
+            searchBox.setWidth("100%");
+
+            expand(searchUserField);
+            searchBox.add(searchUserField);
+
+            searchBox.addClassName("search-box");
+            soChatName.addClassName("list-title");
             listTitle.addClassName("list-title");
 
-            add(listTitle, list);
+            addFriendButton.addClassName("add-friend");
+            searchUserField.addClassName("search-user");
+
+            searchUserField.setPlaceholder("Search");
+
+            add(soChatName, listTitle, searchBox, chatList);
+        }
+
+        public void toFriendsList(){
+            listTitle.setText("Friends");
+            remove(chatList);
+            remove(searchBox);
+
+            searchBox.add(addFriendButton);
+
+            add(searchBox, friendList);
+        }
+
+        public void toDMSList(){
+            listTitle.setText("DMS");
+            remove(friendList);
+            remove(searchBox);
+
+            searchBox.remove(addFriendButton);
+
+            add(searchBox, chatList);
         }
     }
 
@@ -163,11 +221,16 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
             this.id = id;
             this.name = name;
 
-            setWidth("10");
-            setHeight("10");
+            Avatar avatar = new Avatar(name);
+            avatar.setWidth("32px");
+            avatar.setHeight("32px");
+
+            Span label = new Span(name);
 
             addClassName("item");
-            setText(name);
+            setWidthFull();
+            getElement().removeAllChildren();
+            getElement().appendChild(avatar.getElement(), label.getElement());
         }
     }
 }

@@ -70,6 +70,17 @@ public class AuthService {
         return response.getBody();
     }
 
+    public String logout() {
+        ResponseEntity<String> response = rest.postForEntity(
+                "http://localhost:8080/api/auth/logout",
+                null,
+                String.class
+        );
+
+
+        return response.getBody();
+    }
+
     public boolean isTokenValid(String token) {
         try {
             ResponseEntity<Boolean> response = rest.exchange(

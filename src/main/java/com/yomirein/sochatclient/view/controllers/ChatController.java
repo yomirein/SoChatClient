@@ -6,11 +6,13 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
+import com.vaadin.flow.component.textfield.TextField;
 import com.yomirein.sochatclient.config.WebSocketClient;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
 import com.yomirein.sochatclient.model.Response;
 import com.yomirein.sochatclient.model.User;
+import com.yomirein.sochatclient.service.AuthService;
 import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.ChatView;
 import com.vaadin.flow.component.html.Div;
@@ -20,7 +22,6 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompSession;
 
-import java.awt.*;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -82,13 +83,13 @@ public class ChatController {
         return items;
     }
 
-    public void initializeConnection(ChatService chatService,
+    public void initializeConnection(ChatService chatService, AuthService authService,
                                      WebSocketClient webSocketClient,
                                      MessageList messageList,
                                      MessageInput messageInput,
                                      UI ui,
-                                     User user,
-                                     Div chatList) {
+                                     User user, Button logOutButton,
+                                     Div chatList, Div friendList, TextField addFriendField, Button addFriend) {
 
         webSocketClient.connect().thenAccept(session -> {
             System.out.println("[LOG] Connected to WebSocket!");
@@ -106,6 +107,17 @@ public class ChatController {
                         return new Response.ChatWithExtras(chatLList, chatParticipants);
                     })
                     .thenAccept(chats -> ui.access(() -> {
+                        addFriend.addClickListener(event -> {
+                            chatService.createChat(Long.valueOf(addFriendField.getValue()));
+                            ui.push();
+                        });
+                        logOutButton.addClickListener(event -> {
+                            String response = authService.logout();
+                            System.out.println(response);
+                            System.out.println("[LOG] Logged out");
+                            authService.cookieStore.clear();
+                            ui.push();
+                        });
                         if (!ui.isAttached()) {
                             System.out.println("[LOG] UI detached, skipping chat list update");
                             return;
@@ -128,7 +140,7 @@ public class ChatController {
                                 chatName = chat.getName();
                             }
 
-                            Button btn = new ChatView.userInList(chat.getId(), chatName);
+                            ChatView.userInList btn = new ChatView.userInList(chat.getId(), chatName);
                             btn.addClickListener(event ->
                                     openChat(chatService, webSocketClient, messageList, ui, chat.getId())
                             );
