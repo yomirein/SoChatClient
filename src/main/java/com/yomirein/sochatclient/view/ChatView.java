@@ -79,10 +79,16 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
             sideListView.toFriendsList();
         });
 
+
+        Button button = new Button("getToken");
+        button.addClickListener(e -> {
+            add(new H4(authService.cookieStore.getCookies().toString()));
+        });
+
         chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, user,
                 chatHeaderView.logOutButton, chatList, friendList, sideListView.searchUserField, sideListView.addFriendButton);
 
-        add(new H3(user.toString() + " " + authServiceDang.cookieStore.getCookies()), chatHeaderView, chatMainView);
+        add(new H3(user.toString() + " " + authService.cookieStore.getCookies()), button, chatHeaderView, chatMainView);
     }
     @Override
     public void beforeEnter(BeforeEnterEvent event) {

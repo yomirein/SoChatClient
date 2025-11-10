@@ -1,10 +1,12 @@
 package com.yomirein.sochatclient.service;
 
+import com.vaadin.flow.server.VaadinRequest;
 import com.vaadin.flow.server.VaadinSession;
 import com.yomirein.sochatclient.model.Request;
 import com.yomirein.sochatclient.model.Response;
 import lombok.Getter;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
+import org.apache.hc.client5.http.cookie.Cookie;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -76,7 +78,6 @@ public class AuthService {
                 null,
                 String.class
         );
-
 
         return response.getBody();
     }
