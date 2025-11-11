@@ -7,6 +7,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -20,7 +21,9 @@ import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.AuthService;
 import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.controllers.ChatController;
+import org.apache.hc.client5.http.cookie.BasicCookieStore;
 import org.apache.hc.client5.http.cookie.Cookie;
+import org.apache.hc.client5.http.cookie.CookieStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.stomp.StompSession;
 
@@ -47,13 +50,37 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
     ChatService chatService;
     WebSocketClient webSocketClient;
     private final AuthService authService;
+    CookieStore cookieStore;
 
     @Autowired
-    public ChatView(AuthService authServiceDang) {
+    public ChatView(AuthService authServiceDang, ChatService chatService) {
         this.authService = authServiceDang;
-        chatService = new ChatService(authService);
-        webSocketClient = new WebSocketClient(authService.getCookieStore().getCookies());
+        this.chatService = chatService;
 
+        VaadinSession vaadinSession = VaadinSession.getCurrent();
+        vaadinSession.lock();
+        try {
+            cookieStore = (CookieStore) vaadinSession.getAttribute("cookieStore");
+            if (cookieStore != null) {
+                for (Cookie c : cookieStore.getCookies()) {
+                    System.out.println(c.getName() + " = " + c.getValue());
+                }
+            }
+
+        } catch (Exception e)  {
+            getUI().ifPresent(ui -> Notification.show(e.getMessage()));
+            getUI().ifPresent(ui -> ui.access(() -> ui.navigate(LoginView.class)));
+        }
+        finally {
+            vaadinSession.unlock();
+        }
+
+        try {
+            webSocketClient = new WebSocketClient(cookieStore.getCookies());
+        } catch (Exception e) {
+            getUI().ifPresent(ui -> Notification.show("no cookies found"));
+            getUI().ifPresent(ui -> ui.access(() -> ui.navigate(LoginView.class)));
+        }
         UI ui = UI.getCurrent();
 
         User user = VaadinSession.getCurrent().getAttribute(User.class);
@@ -82,20 +109,24 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
 
         Button button = new Button("getToken");
         button.addClickListener(e -> {
-            add(new H4(authService.cookieStore.getCookies().toString()));
+            add(new H4(cookieStore.getCookies().toString()));
         });
 
-        chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, user,
-                chatHeaderView.logOutButton, chatList, friendList, sideListView.searchUserField, sideListView.addFriendButton);
+        try {
+            chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, user,
+                    chatHeaderView.logOutButton, chatList, friendList, sideListView.searchUserField, sideListView.addFriendButton);
+        } catch (Exception e) {
+            Notification.show(e.getMessage());
+        }
 
-        add(new H3(user.toString() + " " + authService.cookieStore.getCookies()), button, chatHeaderView, chatMainView);
+        add(new H3(user.toString() + " " + cookieStore.getCookies()), button, chatHeaderView, chatMainView);
     }
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
 
         String token = null;
-        if (authService.getCookieStore().getCookies() != null) {
-            for (Cookie c : authService.getCookieStore().getCookies()) {
+        if (cookieStore.getCookies() != null) {
+            for (Cookie c : cookieStore.getCookies()) {
                 if ("AUTH_TOKEN".equals(c.getName())) {
                     System.out.println("AUTH_TOKEN");
                     System.out.println(c.getValue());

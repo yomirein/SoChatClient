@@ -9,10 +9,15 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinRequest;
 import com.vaadin.flow.server.VaadinSession;
+import com.yomirein.sochatclient.config.CookieUtils;
 import com.yomirein.sochatclient.model.Response;
 import com.yomirein.sochatclient.model.User;
 import com.yomirein.sochatclient.service.AuthService;
+import org.apache.hc.client5.http.cookie.Cookie;
+import org.apache.hc.client5.http.cookie.CookieStore;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.Optional;
 
 @Route("login")
 public class LoginView extends VerticalLayout {
@@ -48,6 +53,29 @@ public class LoginView extends VerticalLayout {
                 Notification.show("Login failed: " + ex.getMessage());
             }
         });
+
+        CookieStore cookieStore;
+        VaadinSession vaadinSession = VaadinSession.getCurrent();
+        vaadinSession.lock();
+        try {
+            cookieStore = (CookieStore) vaadinSession.getAttribute("cookieStore");
+            if (cookieStore != null) {
+                for (Cookie c : cookieStore.getCookies()) {
+                    System.out.println(c.getName() + " = " + c.getValue());
+                }
+            }
+        } finally {
+            vaadinSession.unlock();
+        }
+        Optional<String> token = CookieUtils.getCookieValue(cookieStore, "AUTH_TOKEN");
+        if (token.isPresent()) {
+            Response.Auth response = authService.getCurrentUser();
+            if (response != null && response.getUser() != null) {
+                Notification.show("Lelelele");
+                VaadinSession.getCurrent().setAttribute(User.class, response.getUser());
+                getUI().ifPresent(ui -> ui.navigate(ChatView.class));
+            }
+        }
 
         Button registerButton = new Button("Register", e ->
                 getUI().ifPresent(ui -> ui.navigate(RegisterView.class))

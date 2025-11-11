@@ -17,76 +17,51 @@ import java.util.Map;
 @Service
 public class ChatService {
 
-    private final ObjectMapper mapper = new ObjectMapper();
     private final String baseUrl = "http://localhost:8080/chat";
-    private final AuthService authService;
-    private final RestTemplate restTemplate;
 
-    public ChatService(AuthService authService) {
-        this.authService = authService;
-        this.restTemplate = authService.getRest();
+    public ChatService() {}
+
+    // --- UI-поток (использует сессионный RestTemplate автоматически) ---
+    public List<Chat> getChats(Long userId) {
+        RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
+        return getChatsUsingRest(rest, userId);
     }
-
 
     public List<Message> getMessages(Long chatId) {
-        ResponseEntity<Message[]> response = restTemplate.getForEntity(
-                baseUrl + "/" + chatId + "/allmessages",
-                Message[].class
-        );
-
-        return Arrays.asList(response.getBody());
-    }
-
-    public List<Chat> getChats(Long userId) {
-        ResponseEntity<Chat[]> response = restTemplate.getForEntity(
-                baseUrl + "/user/chats/" + userId,
-                Chat[].class
-        );
-        Chat[] chatsArray = response.getBody();
-        if (chatsArray == null) {
-            return Collections.emptyList();
-        }
-        return Arrays.asList(chatsArray);
-    }
-
-    public List<Message> getLastMessages(Long chatId) {
-        ResponseEntity<Message[]> response = restTemplate.getForEntity(
-                baseUrl + "/" + chatId + "/messages",
-                Message[].class
-        );
-
-        return Arrays.asList(response.getBody());
+        RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
+        return getMessagesUsingRest(rest, chatId);
     }
 
     public User getUser(Long userId) {
-        ResponseEntity<User> response = restTemplate.getForEntity(
-                baseUrl + "/user/" + userId,
-                User.class
-        );
-
-        User user = response.getBody();
-        if (user == null) {
-            return null;
-        }
-        return user;
+        RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
+        return getUserUsingRest(rest, userId);
     }
 
     public Chat createChat(Long userId2) {
-        String url = baseUrl + "/create";
+        RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
+        return createChatUsingRest(rest, userId2);
+    }
 
-        ResponseEntity<Chat> response = restTemplate.postForEntity(
-                url,
-                userId2,
-                Chat.class
-        );
+    // --- Фоновые версии: принимают RestTemplate (на основе snapshot cookieStore) ---
+    public List<Chat> getChatsUsingRest(RestTemplate rest, Long userId) {
+        ResponseEntity<Chat[]> response = rest.getForEntity(baseUrl + "/user/chats/" + userId, Chat[].class);
+        Chat[] arr = response.getBody();
+        return arr == null ? Collections.emptyList() : Arrays.asList(arr);
+    }
 
+    public List<Message> getMessagesUsingRest(RestTemplate rest, Long chatId) {
+        ResponseEntity<Message[]> response = rest.getForEntity(baseUrl + "/" + chatId + "/allmessages", Message[].class);
+        Message[] arr = response.getBody();
+        return arr == null ? Collections.emptyList() : Arrays.asList(arr);
+    }
 
-        System.out.println(response.getBody().toString());
+    public User getUserUsingRest(RestTemplate rest, Long userId) {
+        ResponseEntity<User> response = rest.getForEntity(baseUrl + "/user/" + userId, User.class);
+        return response.getBody();
+    }
 
-        try {
-            return response.getBody();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    public Chat createChatUsingRest(RestTemplate rest, Long userId2) {
+        ResponseEntity<Chat> response = rest.postForEntity(baseUrl + "/create", userId2, Chat.class);
+        return response.getBody();
     }
 }
