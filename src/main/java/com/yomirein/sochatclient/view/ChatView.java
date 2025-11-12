@@ -107,13 +107,10 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
         });
 
 
-        Button button = new Button("getToken");
-        button.addClickListener(e -> {
-            add(new H4(cookieStore.getCookies().toString()));
-        });
+        Button button = new Button("getLastMessageEvent");
 
         try {
-            chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, user,
+            chatController.initializeConnection(chatService, authService, webSocketClient, messageList, messageInput, ui, button, user,
                     chatHeaderView.logOutButton, chatList, friendList, sideListView.searchUserField, sideListView.addFriendButton);
         } catch (Exception e) {
             Notification.show(e.getMessage());
@@ -243,11 +240,33 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
             messageList.setSizeFull();
             messageInput.setWidthFull();
 
+            messageList.setClassName("none");
+            messageInput.setClassName("none");
+
+            Div userPlate = new Div();
+            Button getOutFromChat = new Button("B");
+            H3 userName = new H3("User");
+            userPlate.add(getOutFromChat, userName);
+            userName.setHeightFull();
+
+            userPlate.addClassName("user-plate");
+
+
+            messageList.getElement().executeJs("""
+                const el = this;
+                el.addEventListener('scroll', () => {
+                    const top = el.scrollTop === 0;
+                    const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight;
+                    if (top) el.dispatchEvent(new CustomEvent('scroll-top'));
+                    if (bottom) el.dispatchEvent(new CustomEvent('scroll-bottom'));
+                });
+            """);
+
             setSizeFull();
             setPadding(false);
             setSpacing(true);
-            add(messageList, messageInput);
-            expand(messageList);
+            add(userPlate, messageList, messageInput);
+            expand(userName, messageList);
         }
     }
 

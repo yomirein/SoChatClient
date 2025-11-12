@@ -23,8 +23,9 @@ public class Response {
     @AllArgsConstructor
     @NoArgsConstructor
     @Getter
-    public static class ChatWithExtras {
-        List<Chat> chats;
-        List<User> users;
+    public static class PageableMessage {
+        private List<Message> messages;
+        private Long chatId;
     }
+
 }

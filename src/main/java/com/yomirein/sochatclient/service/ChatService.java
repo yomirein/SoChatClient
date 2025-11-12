@@ -27,9 +27,14 @@ public class ChatService {
         return getChatsUsingRest(rest, userId);
     }
 
-    public List<Message> getMessages(Long chatId) {
+    public List<Message> getMessages(Long chatId, int getLastMessageId) {
         RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
-        return getMessagesUsingRest(rest, chatId);
+        return getMessagesUsingRest(rest, chatId, getLastMessageId);
+    }
+
+    public List<Message> getAllMessages(Long chatId) {
+        RestTemplate rest = AuthService.createRestTemplateForCurrentVaadinSession();
+        return getAllMessagesUsingRest(rest, chatId);
     }
 
     public User getUser(Long userId) {
@@ -49,7 +54,13 @@ public class ChatService {
         return arr == null ? Collections.emptyList() : Arrays.asList(arr);
     }
 
-    public List<Message> getMessagesUsingRest(RestTemplate rest, Long chatId) {
+    public List<Message> getMessagesUsingRest(RestTemplate rest, Long chatId, int getLastMessageId) {
+        ResponseEntity<Message[]> response = rest.getForEntity(baseUrl + "/" + chatId + "/messages?messageId=" + getLastMessageId, Message[].class);
+        Message[] arr = response.getBody();
+        return arr == null ? Collections.emptyList() : Arrays.asList(arr);
+    }
+
+    public List<Message> getAllMessagesUsingRest(RestTemplate rest, Long chatId) {
         ResponseEntity<Message[]> response = rest.getForEntity(baseUrl + "/" + chatId + "/allmessages", Message[].class);
         Message[] arr = response.getBody();
         return arr == null ? Collections.emptyList() : Arrays.asList(arr);

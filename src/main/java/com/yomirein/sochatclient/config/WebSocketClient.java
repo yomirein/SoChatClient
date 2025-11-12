@@ -2,7 +2,10 @@ package com.yomirein.sochatclient.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
+import com.yomirein.sochatclient.model.Request;
+import com.yomirein.sochatclient.model.Response;
 import org.apache.hc.client5.http.cookie.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +19,7 @@ import org.springframework.web.socket.sockjs.client.*;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 
+import java.awt.print.Pageable;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -32,6 +36,7 @@ public class WebSocketClient {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final Logger log = LoggerFactory.getLogger(WebSocketClient.class);
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
+    private final Map<Long, Consumer<List<Message>>> messageHandlers = new HashMap<>();
     private final String wsUrl = "http://localhost:8080/ws";
 
     String cookieHeader;
@@ -130,6 +135,32 @@ public class WebSocketClient {
         return subscription;
     }
 
+    public StompSession.Subscription subscribeToChatCreation(Consumer<Chat> handler) {
+        if (stompSession == null || !stompSession.isConnected()) {
+            throw new IllegalStateException("Not connected yet");
+        }
+
+        String topic = "/topic/create";
+        StompHeaders headers = new StompHeaders();
+        headers.setDestination(topic);
+        headers.add("cookie", cookieHeader);
+
+        return stompSession.subscribe(headers, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return Chat.class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload == null) return;
+                Chat chat = (Chat) payload;
+                handler.accept(chat);
+            }
+        });
+    }
+
+
     public void sendMessage(Long chatId, String content) {
         if (stompSession == null || !stompSession.isConnected()) {
             throw new IllegalStateException("Not connected yet");
@@ -138,10 +169,6 @@ public class WebSocketClient {
         Message message = new Message();
         message.setChatId(chatId);
         message.setContent(content);
-        //message.setTimestamp(LocalDateTime.now());
-        //message.setId(0L);
-        //message.setSenderId(0L);
-
 
         StompHeaders headers = new StompHeaders();
         headers.add("cookie", cookieHeader);
@@ -149,6 +176,17 @@ public class WebSocketClient {
 
 
         stompSession.send(headers, message);
+    }
+
+    public void createChat(String username){
+        if (stompSession == null || !stompSession.isConnected()) {
+            throw new IllegalStateException("Not connected yet");
+        }
+
+        StompHeaders headers = new StompHeaders();
+        headers.add("cookie", cookieHeader);
+        headers.setDestination("/app/create");
+        stompSession.send(headers, username);
     }
 
     public synchronized void disconnect() {
