@@ -2,6 +2,7 @@ package com.yomirein.sochatclient.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.yomirein.sochatclient.events.EventMessage;
 import com.yomirein.sochatclient.model.Chat;
 import com.yomirein.sochatclient.model.Message;
 import com.yomirein.sochatclient.model.Request;
@@ -38,6 +39,7 @@ public class WebSocketClient {
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
     private final Map<Long, Consumer<List<Message>>> messageHandlers = new HashMap<>();
     private final String wsUrl = "http://localhost:8080/ws";
+    private final Map<Long, Consumer<EventMessage>> chatEventHandlers = new HashMap<>();
 
     String cookieHeader;
 
@@ -158,6 +160,51 @@ public class WebSocketClient {
                 handler.accept(chat);
             }
         });
+    }
+
+    public StompSession.Subscription subscribeChatEvents(Long userId, Consumer<EventMessage> handler) {
+        if (stompSession == null || !stompSession.isConnected()) {
+            throw new IllegalStateException("Not connected yet");
+        }
+
+        String topic = "/topic/chats/" + userId;
+        chatEventHandlers.put(userId, handler);
+
+        StompHeaders headers = new StompHeaders();
+        headers.add("cookie", cookieHeader);
+        headers.setDestination(topic);
+
+        StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return EventMessage.class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload == null) return;
+                Consumer<EventMessage> h = chatEventHandlers.get(userId);
+                EventMessage event = (EventMessage) payload;
+
+                System.out.println("Received event " + event.getClass().getName());
+
+                if (h != null) {
+                    h.accept(event);
+                }
+                    /*
+                switch (event.getEventType()) {
+                    case "chatMessage":
+                        Message msg = (Message) event.getPayload();
+                        System.out.println("New chat message: " + msg.getContent());
+                        break;
+                    case "chatCreate":
+                        Chat chat = (Chat) event.getPayload();
+                        break;
+                */
+            }
+        });
+        System.out.println("Subscribed to " + topic);
+        return subscription;
     }
 
 

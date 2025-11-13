@@ -5,10 +5,13 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.server.VaadinSession;
 import com.yomirein.sochatclient.config.CookieUtils;
 import com.yomirein.sochatclient.config.WebSocketClient;
+import com.yomirein.sochatclient.converter.PayloadConverter;
+import com.yomirein.sochatclient.events.EventMessage;
 import com.yomirein.sochatclient.model.*;
 import com.yomirein.sochatclient.service.AuthService;
 import com.yomirein.sochatclient.service.ChatService;
@@ -18,7 +21,9 @@ import com.yomirein.sochatclient.view.LoginView;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
+import org.apache.hc.client5.http.cookie.Cookie;
 import org.apache.hc.client5.http.cookie.CookieStore;
+import org.checkerframework.checker.units.qual.C;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.web.client.RestTemplate;
 
@@ -121,11 +126,18 @@ public class ChatController {
             }
         });
 
+
+
         webSocketClient.connect().thenAccept(wsSession -> {
             System.out.println("[LOG] Connected to WebSocket!");
 
             final CookieStore snapshot = CookieUtils.snapshotCookieStore(sessionCookieStore);
             final RestTemplate restForBg = AuthService.createRestTemplateFromCookieStore(snapshot);
+            restForBg.getInterceptors().add((request, body, execution) -> {
+                System.out.println("[HTTP] " + request.getHeaders());
+                return execution.execute(request, body);
+            });
+
 
             CompletableFuture.supplyAsync(() -> {
                 List<Chat> chatsList = chatService.getChatsUsingRest(restForBg, user.getId());
@@ -174,50 +186,100 @@ public class ChatController {
 
             final CookieStore subSnapshot = CookieUtils.snapshotCookieStore(sessionCookieStore);
             final RestTemplate restForSubscription = AuthService.createRestTemplateFromCookieStore(subSnapshot);
-            StompSession.Subscription subscriptionToChatCreation = webSocketClient.subscribeToChatCreation(chat -> {
+            restForSubscription.getInterceptors().add((request, body, execution) -> {
+                System.out.println("[HTTP SUB] " + request.getHeaders());
+                return execution.execute(request, body);
+            });
+            StompSession.Subscription subcribetToChatEvents = webSocketClient.subscribeChatEvents(user.getId(), event -> {
+                System.out.println("Started subcribetToChatEvents");
                 CompletableFuture.runAsync(() -> {
-                    try {
-                        List<User> usersList = new ArrayList<>();
-                        for (Long participantId : chat.getParticipants()) {
-                            usersList.add(chatService.getUserUsingRest(restForSubscription, participantId));
-                        }
-                        ChatWithUsers chatWithUsers = new ChatWithUsers();
-                        chatWithUsers.setId(chat.getId());
-                        chatWithUsers.setName(chat.getName());
-                        chatWithUsers.setGroup(chat.isGroup());
-                        chatWithUsers.setParticipants(usersList);
+                    switch (event.getEventType()){
+                        case "sendMessage":
+                            System.out.println("SendMessage");
+                            event.getPayload().getClass().getName();
+                            Message message = PayloadConverter.convertPayload(event.getPayload(), Message.class);
+                            System.out.println(message.getChatId());
+                            System.out.println(selectedChat);
 
-                        ui.access(() -> {
-                            VaadinSession vs = VaadinSession.getCurrent();
-                            if (vs != null) {
-                                CookieStore ss = (CookieStore) vs.getAttribute("cookieStore");
-                                if (ss != null) CookieUtils.mergeCookieStore(ss, subSnapshot);
+                            if (selectedChat == message.getId()) {
+                                User msgSender = chatService.getUserUsingRest(restForSubscription, message.getSenderId());
+                                List<MessageListItem> items = new ArrayList<>(messageList.getItems());
+                                char firstChar = msgSender.getUsername().charAt(0);
+                                int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
+
+                                MessageListItem item = new MessageListItem();
+                                item.setText(message.getContent());
+                                item.setTime(Instant.now());
+                                item.setUserName(msgSender.getUsername());
+                                item.setUserAbbreviation(msgSender.getUsername().substring(0, 1));
+                                item.setUserColorIndex(colorIndex);
+                                ui.access(() -> {
+                                    VaadinSession vs = VaadinSession.getCurrent();
+                                    if (vs != null) {
+                                        CookieStore ss = (CookieStore) vs.getAttribute("cookieStore");
+                                        if (ss != null) CookieUtils.mergeCookieStore(ss, subSnapshot);
+                                    }
+
+                                    if (!ui.isAttached()) {
+                                        System.out.println("[LOG] UI detached, skipping message update");
+                                        return;
+                                    }
+                                    items.add(item);
+                                    messageList.setItems(items);
+                                    ui.push();
+                                    System.out.println("[LOG] messageList updated, total: " + items.size());
+                                });
+                            }
+                            else {
+                                User sender = chatService.getUser(message.getSenderId());
+                                ui.access(() -> {
+                                    Notification.show("Got new message from " + sender.getUsername() + " : " + message);
+                                });
                             }
 
-                            if (!ui.isAttached()) {
-                                System.out.println("[LOG] UI detached, skipping chat update");
-                                return;
+                            break;
+                        case "chatCreated":
+                            System.out.println("chatCreated");
+                            Chat chat = PayloadConverter.convertPayload(event.getPayload(), Chat.class);
+                            List<User> usersList = new ArrayList<>();
+                            for (Long participantId : chat.getParticipants()) {
+                                usersList.add(chatService.getUserUsingRest(restForSubscription, participantId));
                             }
-
+                            ChatWithUsers chatWithUsers = new ChatWithUsers();
+                            chatWithUsers.setId(chat.getId());
+                            chatWithUsers.setName(chat.getName());
+                            chatWithUsers.setGroup(chat.isGroup());
+                            chatWithUsers.setParticipants(usersList);
                             chatList.removeAll();
                             String chatName = derivePeerName(chatWithUsers, user);
                             ChatView.userInList btn = new ChatView.userInList(chat.getId(), chatName);
-                            btn.addClickListener(e -> openChat(chatService, webSocketClient, messageList, messageInput, ui, chat.getId(), testEventButton));
-                            chatList.add(btn);
 
-                            ui.push();
-                        });
+                            ui.access(() -> {
+                                VaadinSession vs = VaadinSession.getCurrent();
+                                if (vs != null) {
+                                    CookieStore ss = (CookieStore) vs.getAttribute("cookieStore");
+                                    if (ss != null) CookieUtils.mergeCookieStore(ss, subSnapshot);
+                                }
 
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                                if (!ui.isAttached()) {
+                                    System.out.println("[LOG] UI detached, skipping chat update");
+                                    return;
+                                }
+                                btn.addClickListener(e -> openChat(chatService, webSocketClient, messageList, messageInput, ui, chat.getId(), testEventButton));
+                                chatList.add(btn);
+
+                                ui.push();
+                            });
+                            break;
                     }
                 });
             });
-
         }).exceptionally(ex -> {
             ex.printStackTrace();
             return null;
         });
+
+
     }
 
     public void openChat(ChatService chatService, WebSocketClient webSocketClient,
@@ -251,7 +313,7 @@ public class ChatController {
                             item.setText(m.getContent());
                             item.setTime(m.getTimestamp().toInstant(ZoneOffset.UTC));
                             item.setUserName(sender.getUsername());
-                            items.add(item);
+                            items.add(0, item);
                         }
                         messageList.setItems(items);
                         ui.push();
@@ -266,60 +328,6 @@ public class ChatController {
             System.out.println("[LOG] Already subscribed to chat " + chatId);
             return;
         }
-
-        final CookieStore subSnapshot = CookieUtils.snapshotCookieStore(sessionStore);
-        final RestTemplate restForSubscription = AuthService.createRestTemplateFromCookieStore(subSnapshot);
-
-        StompSession.Subscription subscription = webSocketClient.subscribeToChat(chatId, msg -> {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    User msgSender = chatService.getUserUsingRest(restForSubscription, msg.getSenderId());
-
-                    ui.access(() -> {
-                        VaadinSession vs = VaadinSession.getCurrent();
-                        if (vs != null) {
-                            CookieStore ss = (CookieStore) vs.getAttribute("cookieStore");
-                            if (ss != null) CookieUtils.mergeCookieStore(ss, subSnapshot);
-                        }
-
-                        if (!ui.isAttached()) {
-                            System.out.println("[LOG] UI detached, skipping message update");
-                            return;
-                        }
-
-                        List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-                        char firstChar = msgSender.getUsername().charAt(0);
-                        int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
-
-                        MessageListItem item = new MessageListItem();
-                        item.setText(msg.getContent());
-                        item.setTime(Instant.now());
-                        item.setUserName(msgSender.getUsername());
-                        item.setUserAbbreviation(msgSender.getUsername().substring(0, 1));
-                        item.setUserColorIndex(colorIndex);
-
-                        items.add(item);
-                        messageList.setItems(items);
-                        ui.push();
-                        System.out.println("[LOG] messageList updated, total: " + items.size());
-                    });
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            });
-        });
-
-        subscriptions.put(chatId, subscription);
-        ui.access(() -> {
-            ui.addDetachListener(event -> {
-                StompSession.Subscription sub = subscriptions.remove(chatId);
-                if (sub != null) {
-                    sub.unsubscribe();
-                    System.out.println("[LOG] Unsubscribed from chat " + chatId + " due to UI detach");
-                }
-            });
-        });
     }
 
     public void setMessageSending(WebSocketClient webSocketClient,
