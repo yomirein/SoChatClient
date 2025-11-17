@@ -16,6 +16,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.Route;
 import org.springframework.messaging.simp.stomp.StompSession;
 
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,6 +44,7 @@ public class ChatViewDesignTest extends VerticalLayout{
 
         ChatHeaderView chatHeaderView = new ChatHeaderView();
         ChatMainView chatMainView = new ChatMainView(sideListView, chatMessagingView);
+
 
         chatHeaderView.dMSListButton.addClickListener(e -> {
             sideListView.toDMSList();
@@ -99,10 +101,13 @@ public class ChatViewDesignTest extends VerticalLayout{
             setPadding(false);
             setSpacing(true);
 
-            add(chatList, chatMessaging);
+            CallView callView = new CallView();
+
+            add(chatList, chatMessaging, callView);
 
             setFlexGrow(1, chatList);
             setFlexGrow(2, chatMessaging);
+            setFlexGrow(1, callView);
         }
     }
 
