@@ -1,4 +1,4 @@
 package com.yomirein.sochatclient.view.controllers;
 
-public class VoiceChatController {
+public class CallController {
 }

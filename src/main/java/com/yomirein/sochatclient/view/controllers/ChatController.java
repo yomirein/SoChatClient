@@ -1,7 +1,10 @@
 package com.yomirein.sochatclient.view.controllers;
 
+import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.messages.MessageInput;
 import com.vaadin.flow.component.messages.MessageList;
 import com.vaadin.flow.component.messages.MessageListItem;
@@ -18,6 +21,7 @@ import com.yomirein.sochatclient.service.ChatService;
 import com.yomirein.sochatclient.view.ChatView;
 import com.vaadin.flow.component.html.Div;
 import com.yomirein.sochatclient.view.LoginView;
+import com.yomirein.sochatclient.view.components.Notifications;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
@@ -53,18 +57,6 @@ public class ChatController {
     }
 
 
-    public List<MessageListItem> sendMessage(WebSocketClient webSocketClient, Long chatId, MessageList messageList, MessageInput messageInput) {
-        List<MessageListItem> items = new ArrayList<>(messageList.getItems());
-        messageInput.addSubmitListener(submitEvent -> {
-            webSocketClient.sendMessage(chatId, submitEvent.getValue());
-            System.out.println("масаге отправляется");
-            MessageListItem newMessage = new MessageListItem(
-                    submitEvent.getValue(), Instant.now(), "username");
-            newMessage.setUserColorIndex(3);
-            items.add(newMessage);
-        });
-        return items;
-    }
     private CookieStore getOrCreateSessionCookieStore() {
         VaadinSession vs = VaadinSession.getCurrent();
         if (vs == null) return null;
@@ -133,12 +125,6 @@ public class ChatController {
 
             final CookieStore snapshot = CookieUtils.snapshotCookieStore(sessionCookieStore);
             final RestTemplate restForBg = AuthService.createRestTemplateFromCookieStore(snapshot);
-            restForBg.getInterceptors().add((request, body, execution) -> {
-                System.out.println("[HTTP] " + request.getHeaders());
-                return execution.execute(request, body);
-            });
-
-
             CompletableFuture.supplyAsync(() -> {
                 List<Chat> chatsList = chatService.getChatsUsingRest(restForBg, user.getId());
                 List<ChatWithUsers> chatsListWithUsers = new ArrayList<>();
@@ -186,22 +172,14 @@ public class ChatController {
 
             final CookieStore subSnapshot = CookieUtils.snapshotCookieStore(sessionCookieStore);
             final RestTemplate restForSubscription = AuthService.createRestTemplateFromCookieStore(subSnapshot);
-            restForSubscription.getInterceptors().add((request, body, execution) -> {
-                System.out.println("[HTTP SUB] " + request.getHeaders());
-                return execution.execute(request, body);
-            });
-            StompSession.Subscription subcribetToChatEvents = webSocketClient.subscribeChatEvents(user.getId(), event -> {
-                System.out.println("Started subcribetToChatEvents");
+            StompSession.Subscription subcribeToChatEvents = webSocketClient.subscribeChatEvents(user.getId(), event -> {
                 CompletableFuture.runAsync(() -> {
                     switch (event.getEventType()){
                         case "sendMessage":
-                            System.out.println("SendMessage");
                             event.getPayload().getClass().getName();
                             Message message = PayloadConverter.convertPayload(event.getPayload(), Message.class);
-                            System.out.println(message.getChatId());
-                            System.out.println(selectedChat);
 
-                            if (selectedChat == message.getId()) {
+                            if (selectedChat == message.getChatId()) {
                                 User msgSender = chatService.getUserUsingRest(restForSubscription, message.getSenderId());
                                 List<MessageListItem> items = new ArrayList<>(messageList.getItems());
                                 char firstChar = msgSender.getUsername().charAt(0);
@@ -233,24 +211,27 @@ public class ChatController {
                             else {
                                 User sender = chatService.getUser(message.getSenderId());
                                 ui.access(() -> {
-                                    Notification.show("Got new message from " + sender.getUsername() + " : " + message);
+                                    Notification notification = Notifications.show(sender.getUsername(), message.getContent());
+                                    notification.open();
                                 });
                             }
 
                             break;
-                        case "chatCreated":
+                        case "chatCreate":
                             System.out.println("chatCreated");
                             Chat chat = PayloadConverter.convertPayload(event.getPayload(), Chat.class);
                             List<User> usersList = new ArrayList<>();
                             for (Long participantId : chat.getParticipants()) {
                                 usersList.add(chatService.getUserUsingRest(restForSubscription, participantId));
                             }
+                            for (var v : usersList){
+                                System.out.println("[LOG] user: " + v.getUsername());
+                            }
                             ChatWithUsers chatWithUsers = new ChatWithUsers();
                             chatWithUsers.setId(chat.getId());
                             chatWithUsers.setName(chat.getName());
                             chatWithUsers.setGroup(chat.isGroup());
                             chatWithUsers.setParticipants(usersList);
-                            chatList.removeAll();
                             String chatName = derivePeerName(chatWithUsers, user);
                             ChatView.userInList btn = new ChatView.userInList(chat.getId(), chatName);
 
@@ -293,6 +274,19 @@ public class ChatController {
 
         CompletableFuture.supplyAsync(() -> chatService.getMessagesUsingRest(restForBg, chatId, 0))
                 .thenAccept(messages -> {
+
+                    List<MessageListItem> items = new ArrayList<>();
+                    for (Message m : messages) {
+                        User sender = chatService.getUser(m.getSenderId()); // UI-версия
+                        char firstChar = sender.getUsername().charAt(0);
+                        int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
+                        MessageListItem item = new MessageListItem();
+                        item.setText(m.getContent());
+                        item.setTime(m.getTimestamp().toInstant(ZoneOffset.UTC));
+                        item.setUserName(sender.getUsername());
+                        item.setUserColorIndex(colorIndex);
+                        items.add(0, item);
+                    }
                     ui.access(() -> {
                         messageList.setClassName("chat");
                         messageInput.setClassName("chatInput");
@@ -304,16 +298,6 @@ public class ChatController {
                         if (vs != null) {
                             CookieStore ss = (CookieStore) vs.getAttribute("cookieStore");
                             if (ss != null) CookieUtils.mergeCookieStore(ss, snapshot);
-                        }
-
-                        List<MessageListItem> items = new ArrayList<>();
-                        for (Message m : messages) {
-                            User sender = chatService.getUser(m.getSenderId()); // UI-версия
-                            MessageListItem item = new MessageListItem();
-                            item.setText(m.getContent());
-                            item.setTime(m.getTimestamp().toInstant(ZoneOffset.UTC));
-                            item.setUserName(sender.getUsername());
-                            items.add(0, item);
                         }
                         messageList.setItems(items);
                         ui.push();

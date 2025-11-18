@@ -94,26 +94,63 @@ html, body, #outlet {
     overflow: auto;
 }
 .voice-panel {
-    justify-content: center; /* центрируем всё внутри CallView */
+    justify-content: center;
     align-items: center;
     width: 100%;
     height: 100%;
+    max-width: 100%;
+}
+.call-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    align-items: center;
+}
+
+.voice-user-list {
+    overflow: auto;
+    gap: 0.8rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+
+    justify-items: center;
+    align-items: center;
+}
+
+.voice-user-list::-webkit-scrollbar {
+    width: 10px;
+    background-color: #f9f9fd;
+}
+
+.voice-user-list::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background-color: #18aaaa;
+}
+
+.voice-user-list::-webkit-scrollbar-track {
+    -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.2);
+    border-radius: 10px;
+    background-color: #f9f9fd;
+}
+
+.call-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
 }
 
 .voice-user-block {
-    width: 120px;
-    height: 120px;
-    background: rgba(255, 0, 0, 0.8); /* ЯРКО-КРАСНЫЙ */
-    border: 3px solid black;
+    width: 100%;
+    max-width: 200px;
+    aspect-ratio: 16 / 10;
+    background-color: lightblue;
+    padding: 5px;
+    border-radius: 10px;
     display: flex;
-    align-items: center;
     justify-content: center;
-}
-
-.voice-user-block vaadin-avatar {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
+    align-items: center;
+    box-sizing: border-box;
 }
 
 .right-panel, .voice-panel {

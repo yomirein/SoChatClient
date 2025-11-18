@@ -176,11 +176,26 @@ public class ChatViewDesignTest extends VerticalLayout{
             messageList.setSizeFull();
             messageInput.setWidthFull();
 
+            messageList.setClassName("none");
+            messageInput.setClassName("none");
+
+            Div userPlate = new Div();
+            Button getOutFromChat = new Button("B");
+            H3 userName = new H3("User");
+
+            Button callButton = new Button("Call");
+            Button callWithoutVideo = new Button("wo/ video");
+
+            userPlate.add(getOutFromChat, userName, callButton, callWithoutVideo);
+            userName.setHeightFull();
+
+            userPlate.addClassName("user-plate");
+
             setSizeFull();
             setPadding(false);
             setSpacing(true);
-            add(messageList, messageInput);
-            expand(messageList);
+            add(userPlate, messageList, messageInput);
+            expand(userName, messageList);
         }
     }
 
