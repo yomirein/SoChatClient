@@ -4,7 +4,10 @@ let localStream = null;
 let remoteStream = null;
 let connectedUserId = null;
 let pendingCandidates = [];
-
+let headers = {
+    Authorization: "Bearer " + "",
+    cookie: document.cookie
+};
 const APP_PREFIX = "/app";
 const USER_QUEUE = "/user/queue/call";
 
@@ -22,6 +25,11 @@ function setStatus(text) {
 window.ensureStomp = function ensureStomp() {
     if (stompClient && stompClient.connected) return;
     const token = window.authToken;
+    headers = {
+        Authorization: "Bearer " + token,
+        cookie: document.cookie
+    };
+
     const socket = new SockJS("http://localhost:8443/ws");
     stompClient = Stomp.over(socket);
     stompClient.debug = () => {};
@@ -32,7 +40,7 @@ window.ensureStomp = function ensureStomp() {
         { Authorization: "Bearer " + token },
         () => {
             setStatus("STOMP соединение установлено.");
-            stompClient.subscribe(USER_QUEUE, onSignalMessage);
+            stompClient.subscribe(USER_QUEUE, onSignalMessage, headers);
         },
         (err) => {
             setStatus("Ошибка STOMP: " + err);
@@ -302,7 +310,7 @@ function sendSignal(path, payload) {
         window.ensureStomp();
         return;
     }
-    stompClient.send(APP_PREFIX + path, {}, JSON.stringify(payload));
+    stompClient.send(APP_PREFIX + path, headers, JSON.stringify(payload));
 }
 function cleanup() {
     connectedUserId = null;

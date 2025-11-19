@@ -210,7 +210,7 @@ public class ChatController {
                                 });
                             }
                             else {
-                                User sender = chatService.getUser(message.getSenderId());
+                                User sender = chatService.getUserUsingRest(restForSubscription, message.getSenderId());
                                 ui.access(() -> {
                                     Notification notification = Notifications.show(sender.getUsername(), message.getContent());
                                     notification.open();
@@ -281,7 +281,7 @@ public class ChatController {
                     List<User> userList = new ArrayList<>();
                     User reciever = null;
                     for (Message m : messages) {
-                        User sender = chatService.getUser(m.getSenderId()); // UI-версия
+                        User sender = chatService.getUserUsingRest(restForBg, m.getSenderId()); // UI-версия
 
                         if (sender != user){
                             reciever = sender;
@@ -389,7 +389,7 @@ public class ChatController {
 
                             List<MessageListItem> items = new ArrayList<>(messageList.getItems());
                             for (Message m : messages) {
-                                User sender = chatService.getUser(m.getSenderId()); // UI-версия
+                                User sender = chatService.getUserUsingRest(restForBg, m.getSenderId()); // UI-версия
                                 MessageListItem item = new MessageListItem();
                                 System.out.println(m.getContent());
                                 item.setText(m.getContent());
