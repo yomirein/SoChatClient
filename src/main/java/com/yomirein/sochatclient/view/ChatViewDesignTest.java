@@ -101,13 +101,13 @@ public class ChatViewDesignTest extends VerticalLayout{
             setPadding(false);
             setSpacing(true);
 
-            CallView callView = new CallView();
+            //CallView callView = new CallView();
 
-            add(chatList, chatMessaging, callView);
+            add(chatList, chatMessaging/*, callView*/);
 
             setFlexGrow(1, chatList);
             setFlexGrow(2, chatMessaging);
-            setFlexGrow(1, callView);
+            //setFlexGrow(1, callView);
         }
     }
 

@@ -1,223 +1,329 @@
+let stompClient = null;
 let pc = null;
-let ws = null;
-let wsOpen = false;
-let wsQueue = [];
-let iceQueue = [];
-let madeOffer = false;
-let isInitiator = false;
+let localStream = null;
+let remoteStream = null;
+let connectedUserId = null;
+let pendingCandidates = [];
 
-function wsSend(obj) {
-    console.log("[WS send]", obj);
-    if (wsOpen) {
-        try {
-            ws.send(JSON.stringify(obj));
-        } catch (e) {
-            console.warn("[WS] send failed:", e);
-            wsQueue.push(obj);
+const APP_PREFIX = "/app";
+const USER_QUEUE = "/user/queue/call";
+
+const rtcConfig = {
+    iceServers: [
+        { urls: ["stun:stun.l.google.com:19302"] }
+    ]
+};
+
+function setStatus(text) {
+    const el = document.getElementById("connectionStatus");
+    if (el) el.textContent = text;
+}
+
+window.ensureStomp = function ensureStomp() {
+    if (stompClient && stompClient.connected) return;
+    const token = window.authToken;
+    const socket = new SockJS("http://localhost:8443/ws");
+    stompClient = Stomp.over(socket);
+    stompClient.debug = () => {};
+
+    console.log("GOT TOKEN IN JS " + token)
+
+    stompClient.connect(
+        { Authorization: "Bearer " + token },
+        () => {
+            setStatus("STOMP соединение установлено.");
+            stompClient.subscribe(USER_QUEUE, onSignalMessage);
+        },
+        (err) => {
+            setStatus("Ошибка STOMP: " + err);
         }
-    } else {
-        wsQueue.push(obj);
-    }
-}
+    );
 
-function flushWsQueue() {
-    if (!wsOpen) return;
-    while (wsQueue.length) {
-        const msg = wsQueue.shift();
-        try { ws.send(JSON.stringify(msg)); } catch (e) { console.warn("[WS] flush send failed", e); wsQueue.unshift(msg); break; }
-    }
-}
+};
 
-function flushIceQueue() {
-    if (!pc) return;
-    if (!pc.remoteDescription || !pc.remoteDescription.type) {
-        console.log("[ICE] remoteDescription not set yet; keep queue size:", iceQueue.length);
+window.startCallTo = async function startCallTo(targetUserId) {
+    try {
+        if (pc) {
+            setStatus("Уже идёт звонок. Сначала завершите текущий.");
+            return;
+        }
+        connectedUserId = targetUserId;
+
+        await setupPeerConnection();
+
+        const offer = await pc.createOffer({
+            offerToReceiveAudio: false,
+            offerToReceiveVideo: true,
+        });
+        await pc.setLocalDescription(offer);
+
+        sendSignal("/call/offer", {
+            toUserId: targetUserId,
+            fromUserId: window.__MY_USER_ID,
+            type: "offer",
+            status: "ringing",
+            sdp: offer.sdp
+        });
+
+        setStatus("Отправлен запрос на звонок...");
+    } catch (e) {
+        console.error(e);
+        setStatus("Не удалось начать звонок: " + e.message);
+        cleanup();
+    }
+};
+
+window.endCall = function endCall() {
+    if (connectedUserId) {
+        sendSignal("/call/control", {
+            toUserId: connectedUserId,
+            fromUserId: window.__MY_USER_ID,
+            type: "control",
+            status: "end"
+        });
+    }
+    cleanup();
+    setStatus("Звонок завершён.");
+};
+
+window.toggleVideo = function toggleVideo() {
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.enabled = !videoTrack.enabled;
+};
+
+window.toggleMic = function toggleMic() {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.enabled = !audioTrack.enabled;
+};
+
+// Новый метод: принять звонок
+window.acceptIncomingCall = async function acceptIncomingCall() {
+    try {
+        if (!pc) await setupPeerConnection();
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        sendSignal("/call/answer", {
+            toUserId: connectedUserId,
+            fromUserId: window.__MY_USER_ID,
+            type: "answer",
+            status: "accepted",
+            sdp: answer.sdp
+        });
+
+        setStatus("Вы приняли звонок. Отправлен ответ.");
+    } catch (e) {
+        console.error(e);
+        setStatus("Ошибка при принятии звонка: " + e.message);
+        cleanup();
+    }
+};
+
+// Новый метод: отклонить звонок
+window.rejectIncomingCall = function rejectIncomingCall() {
+    if (connectedUserId) {
+        sendSignal("/call/control", {
+            toUserId: connectedUserId,
+            fromUserId: window.__MY_USER_ID,
+            type: "control",
+            status: "rejected"
+        });
+    }
+    cleanup();
+    setStatus("Звонок отклонён.");
+};
+
+function onSignalMessage(frame) {
+    let msg;
+    try {
+        msg = JSON.parse(frame.body);
+    } catch (e) {
+        console.warn("Bad signal message", frame.body);
         return;
     }
-    while (iceQueue.length) {
-        const candidate = iceQueue.shift();
-        pc.addIceCandidate(candidate).catch(e => console.warn("[ICE] addIceCandidate failed from queue", e));
+
+    const { type, status, sdp, ice, fromUserId } = msg;
+
+    if (!connectedUserId && fromUserId) {
+        connectedUserId = fromUserId;
+    }
+    switch (type) {
+        case "offer":
+            // Caller не должен обрабатывать чужие offer
+            if (fromUserId !== window.__MY_USER_ID) {
+                handleOffer(msg);
+            }
+            break;
+        case "answer":
+            // callee не должен обрабатывать свой же answer
+            if (fromUserId !== window.__MY_USER_ID) {
+                handleAnswer(sdp);
+            }
+            break;
+        case "ice":
+            handleRemoteIce(ice);
+            break;
+        case "control":
+            handleControl(status);
+            break;
     }
 }
 
-// ===== публичные функции вызываемые из Vaadin =====
-window.startCall = async function () {
-    isInitiator = true;
-    await setupWebRTC();
-};
+async function handleOffer(msg) {
+    try {
+        if (!pc) await setupPeerConnection();
+        pendingCandidates = [];
+        await pc.setRemoteDescription({
+            type: "offer",
+            sdp: msg.sdp
+        });
 
-window.answerCall = async function () {
-    isInitiator = false;
-    await setupWebRTC();
-};
+        connectedUserId = msg.fromUserId;
 
-// ================== основная логика ==================
-async function setupWebRTC() {
-    if (pc) {
-        console.warn("[webrtc] pc already exists — reusing (closing and recreating)");
-        try { pc.close(); } catch(e) {}
-        pc = null;
-        iceQueue = [];
-        wsQueue = [];
-        madeOffer = false;
+        setStatus("Входящий звонок от пользователя " + msg.fromUserId + ". Нажмите Join Call для ответа.");
+    } catch (e) {
+        console.error(e);
+        setStatus("Ошибка обработки предложения: " + e.message);
+        sendSignal("/call/control", {
+            toUserId: msg.fromUserId,
+            fromUserId: window.__MY_USER_ID,
+            type: "control",
+            status: "rejected"
+        });
+        cleanup();
     }
+}
 
-    pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            // Отправляем candidate или кладём в очередь, wsSend сам буферизует, но candidate может прийти раньше wsOpen
-            wsSend({ ice: e.candidate });
+async function handleAnswer(sdp) {
+    try {
+        if (!pc) {
+            console.warn("No peer connection for answer");
+            return;
         }
+        await pc.setRemoteDescription({ type: "answer", sdp });
+        setStatus("Удалённое SDP установлено. Соединение устанавливается...");
+
+        // теперь можно добавить все накопленные ICE кандидаты
+        pendingCandidates.forEach(c => pc.addIceCandidate(c));
+        pendingCandidates = [];
+    } catch (e) {
+        console.error(e);
+        setStatus("Ошибка установки ответа: " + e.message);
+        cleanup();
+    }
+}
+
+// Приходит ICE от удалённого
+function handleRemoteIce(iceJson) {
+    try {
+        const candidate = JSON.parse(iceJson);
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+            pc.addIceCandidate(candidate).catch(err => {
+                console.warn("ICE add failed", err);
+            });
+        } else {
+            // пока remoteDescription не установлен — складываем в очередь
+            pendingCandidates.push(candidate);
+        }
+    } catch (e) {
+        console.warn("Bad ICE", iceJson, e);
+    }
+}
+
+function handleControl(status) {
+    if (status === "end" || status === "rejected") {
+        setStatus(status === "end" ? "Партнёр завершил звонок." : "Звонок отклонён.");
+        cleanup();
+    } else if (status === "busy") {
+        setStatus("Пользователь занят.");
+        cleanup();
+    }
+}
+
+async function setupPeerConnection() {
+    pc = new RTCPeerConnection(rtcConfig);
+
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    attachStream("localVideo", localStream);
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    remoteStream = new MediaStream();
+    attachStream("remoteVideo", remoteStream);
+
+    pc.ontrack = (event) => {
+        event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
     };
 
-    pc.oniceconnectionstatechange = () => {
-        console.log("[pc] iceConnectionState:", pc.iceConnectionState);
+    pc.onicecandidate = (event) => {
+        if (event.candidate && connectedUserId) {
+            sendSignal("/call/ice", {
+                toUserId: connectedUserId,
+                fromUserId: window.__MY_USER_ID,
+                type: "ice",
+                ice: JSON.stringify(event.candidate)
+            });
+        }
     };
 
     pc.onconnectionstatechange = () => {
-        console.log("[pc] connectionState:", pc.connectionState);
-    };
-
-    pc.ontrack = (e) => {
-        console.log("[pc] ontrack", e.streams);
-        attachVideo("remoteVideo", e.streams[0], false); // remote не muted
-    };
-
-    // получаем медиа (локальное)
-    let stream;
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    } catch (err) {
-        console.error("[webrtc] getUserMedia failed:", err);
-        alert("Не удалось получить доступ к камере/микрофону: " + err.message);
-        return;
-    }
-
-    attachVideo("localVideo", stream, true);
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    ws = new WebSocket("wss://5mwqpj9k-8080.euw.devtunnels.ms/signal");
-    wsOpen = false;
-
-    ws.onopen = () => {
-        console.log("[WS] open");
-        wsOpen = true;
-        flushWsQueue();
-        // после открытия ws, если мы инициатор и ещё не сделали offer — делаем его
-        if (isInitiator && !madeOffer) {
-            createAndSendOffer().catch(e => console.error("[webrtc] createOffer error", e));
+        setStatus("Состояние соединения: " + pc.connectionState);
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected" || pc.connectionState === "closed") {
+            if (pc.connectionState === "failed") cleanup();
         }
     };
-
-    ws.onclose = (ev) => {
-        console.log("[WS] close", ev);
-        wsOpen = false;
-    };
-
-    ws.onerror = (err) => {
-        console.warn("[WS] error", err);
-    };
-
-    ws.onmessage = async (evt) => {
-        let data;
-        try {
-            data = JSON.parse(evt.data);
-        } catch (e) {
-            console.warn("[WS] failed parse message", evt.data);
-            return;
-        }
-        console.log("[WS recv]", data);
-
-        // ICE
-        if (data.ice) {
-            // если remoteDescription ещё не установлен — буферизуем кандидат
-            if (!pc.remoteDescription || !pc.remoteDescription.type) {
-                iceQueue.push(data.ice);
-                console.log("[ICE] queued, queue length =", iceQueue.length);
-            } else {
-                try {
-                    await pc.addIceCandidate(data.ice);
-                    console.log("[ICE] added candidate");
-                } catch (e) {
-                    console.warn("[ICE] addIceCandidate failed", e);
-                }
-            }
-            return;
-        }
-
-        // OFFER
-        if (data.offer) {
-            console.log("[SDP] received offer");
-            try {
-                // если мы уже создали offer и еще не установили remote, это glare — простой разрешатель:
-                // если мы сделали offer (madeOffer === true) и получили offer от peer, корректнее — отказаться от своей роли и принять чужой.
-                if (madeOffer && isInitiator) {
-                    console.log("[glare] we made offer but received offer — backing off to accept remote");
-                    // закрыть старое local desc? проще: позволяем setRemoteDescription перезаписать при actpass/activesetup handled by browser
-                }
-
-                await pc.setRemoteDescription(data.offer);
-                // применить накопленные кандидаты
-                flushIceQueue();
-
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                wsSend({ answer });
-                console.log("[SDP] sent answer");
-            } catch (e) {
-                console.error("[SDP] processing offer failed", e);
-            }
-            return;
-        }
-
-        // ANSWER
-        if (data.answer) {
-            console.log("[SDP] received answer");
-            try {
-                await pc.setRemoteDescription(data.answer);
-                console.log("[SDP] remoteDescription set from answer");
-                // после установки remote можно применить буферные кандидаты
-                flushIceQueue();
-            } catch (e) {
-                console.error("[SDP] setRemoteDescription(answer) failed", e);
-            }
-            return;
-        }
-    };
-
-    // Дополнительная страховка: если ws не открылся, но мы всё равно хотим инициировать (например startCall вызван до открытия ws),
-    // createAndSendOffer будет выполнен после ws.onopen -> flushWsQueue(), либо можно вызвать тут с небольшым таймаут.
 }
 
-async function createAndSendOffer() {
-    if (!pc) throw new Error("pc is not created");
-    try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        madeOffer = true;
-        wsSend({ offer });
-        console.log("[SDP] offer created and sent");
-    } catch (e) {
-        console.error("[SDP] createOffer failed", e);
-    }
-}
+function attachStream(containerId, stream) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-// ===================== UI helper =====================
-function attachVideo(id, stream, muted = false) {
-    const container = document.getElementById(id);
-    if (!container) {
-        console.warn("[attachVideo] container not found:", id);
-        return;
+    let video = container.querySelector("video");
+    if (!video) {
+        video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        if (containerId === "localVideo") video.muted = true;
+        video.style.width = "100%";
+        video.style.height = "auto";
+        container.appendChild(video);
     }
-    container.innerHTML = "";
-    const video = document.createElement("video");
     video.srcObject = stream;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.muted = !!muted;
+}
 
-    container.appendChild(video);
+function sendSignal(path, payload) {
+    if (!stompClient || !stompClient.connected) {
+        setStatus("STOMP не готов. Переподключение...");
+        window.ensureStomp();
+        return;
+    }
+    stompClient.send(APP_PREFIX + path, {}, JSON.stringify(payload));
+}
+function cleanup() {
+    connectedUserId = null;
+    pendingCandidates = [];
+
+    if (pc) {
+        try { pc.onicecandidate = null; pc.ontrack = null; pc.close(); } catch (e) {}
+        pc = null;
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+    }
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(t => t.stop());
+        remoteStream = null;
+    }
+
+    // Clear video elements
+    const lv = document.querySelector("#localVideo video");
+    const rv = document.querySelector("#remoteVideo video");
+    if (lv) lv.srcObject = null;
+    if (rv) rv.srcObject = null;
 }

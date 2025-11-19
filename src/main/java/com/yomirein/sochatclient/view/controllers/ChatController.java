@@ -18,6 +18,7 @@ import com.yomirein.sochatclient.events.EventMessage;
 import com.yomirein.sochatclient.model.*;
 import com.yomirein.sochatclient.service.AuthService;
 import com.yomirein.sochatclient.service.ChatService;
+import com.yomirein.sochatclient.view.CallView;
 import com.yomirein.sochatclient.view.ChatView;
 import com.vaadin.flow.component.html.Div;
 import com.yomirein.sochatclient.view.LoginView;
@@ -88,7 +89,7 @@ public class ChatController {
                                      MessageInput messageInput,
                                      UI ui, Button testEventButton,
                                      User user, Button logOutButton,
-                                     Div chatList, Div friendList, TextField addFriendField, Button addFriend) {
+                                     Div chatList, Div friendList, TextField addFriendField, Button addFriend, ChatView.ChatMainView chatMainView) {
 
         final CookieStore sessionCookieStore = getOrCreateSessionCookieStore();
 
@@ -159,7 +160,7 @@ public class ChatController {
                                 String chatName = derivePeerName(chat, user);
                                 ChatView.userInList btn = new ChatView.userInList(chat.getId(), chatName);
                                 btn.addClickListener(e -> openChat(chatService, webSocketClient, messageList,
-                                        messageInput, ui, chat.getId(), testEventButton));
+                                        messageInput, ui, chat.getId(), testEventButton, chatMainView, user));
                                 chatList.add(btn);
                             }
                             ui.push();
@@ -246,7 +247,7 @@ public class ChatController {
                                     System.out.println("[LOG] UI detached, skipping chat update");
                                     return;
                                 }
-                                btn.addClickListener(e -> openChat(chatService, webSocketClient, messageList, messageInput, ui, chat.getId(), testEventButton));
+                                btn.addClickListener(e -> openChat(chatService, webSocketClient, messageList, messageInput, ui, chat.getId(), testEventButton, chatMainView, user));
                                 chatList.add(btn);
 
                                 ui.push();
@@ -264,7 +265,8 @@ public class ChatController {
     }
 
     public void openChat(ChatService chatService, WebSocketClient webSocketClient,
-                         MessageList messageList, MessageInput messageInput, UI ui, Long chatId, Button testEventButton) {
+                         MessageList messageList, MessageInput messageInput, UI ui, Long chatId,
+                         Button testEventButton, ChatView.ChatMainView chatMainView, User user) {
 
         final CookieStore sessionStore = getOrCreateSessionCookieStore();
         selectedChat = chatId;
@@ -276,8 +278,15 @@ public class ChatController {
                 .thenAccept(messages -> {
 
                     List<MessageListItem> items = new ArrayList<>();
+                    List<User> userList = new ArrayList<>();
+                    User reciever = null;
                     for (Message m : messages) {
                         User sender = chatService.getUser(m.getSenderId()); // UI-версия
+
+                        if (sender != user){
+                            reciever = sender;
+                        }
+
                         char firstChar = sender.getUsername().charAt(0);
                         int colorIndex = (Character.toLowerCase(firstChar) - 'a') % 10;
                         MessageListItem item = new MessageListItem();
@@ -287,12 +296,18 @@ public class ChatController {
                         item.setUserColorIndex(colorIndex);
                         items.add(0, item);
                     }
+                    final User finalUser = reciever;
+
                     ui.access(() -> {
                         messageList.setClassName("chat");
                         messageInput.setClassName("chatInput");
                         messageList.setSizeFull();
                         messageInput.setWidthFull();
 
+                        if (finalUser != null) {
+                            CallView callView = new CallView(user, finalUser);
+                            chatMainView.add(callView);
+                        }
 
                         VaadinSession vs = VaadinSession.getCurrent();
                         if (vs != null) {

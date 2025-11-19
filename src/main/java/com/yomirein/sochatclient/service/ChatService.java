@@ -17,7 +17,7 @@ import java.util.Map;
 @Service
 public class ChatService {
 
-    private final String baseUrl = "http://localhost:8080/chat";
+    private final String baseUrl = "http://localhost:8443/chat";
 
     public ChatService() {}
 
