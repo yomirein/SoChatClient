@@ -29,8 +29,9 @@ window.ensureStomp = function ensureStomp() {
         Authorization: "Bearer " + token,
         cookie: document.cookie
     };
+    console.log(headers)
 
-    const socket = new SockJS("http://localhost:8443/ws");
+    const socket = new SockJS("https://localhost:8443/ws");
     stompClient = Stomp.over(socket);
     stompClient.debug = () => {};
 
