@@ -38,7 +38,7 @@ public class WebSocketClient {
     private static final Logger log = LoggerFactory.getLogger(WebSocketClient.class);
     private final Map<Long, Consumer<Message>> chatHandlers = new HashMap<>();
     private final Map<Long, Consumer<List<Message>>> messageHandlers = new HashMap<>();
-    private final String wsUrl = "https://localhost:8443/ws";
+    private final String wsUrl = "http://localhost:8443/ws";
     private final Map<Long, Consumer<EventMessage>> chatEventHandlers = new HashMap<>();
 
     private String token;

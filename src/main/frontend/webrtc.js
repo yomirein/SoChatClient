@@ -11,12 +11,14 @@ let headers = {
 const APP_PREFIX = "/app";
 const USER_QUEUE = "/user/queue/call";
 
-const rtcConfig = {
-    iceServers: [
-        { urls: ["stun:stun.l.google.com:19302"] }
-    ]
-};
+const response =
+    await fetch("https://yomomomo.metered.live/api/v1/turn/credentials?apiKey=564f17f559f5957dcb5ea4b6fee8b380f421");
 
+// Saving the response in the iceServers array
+const iceServers = await response.json();
+const rtcConfig = new RTCPeerConnection({
+    iceServers: iceServers
+});
 function setStatus(text) {
     const el = document.getElementById("connectionStatus");
     if (el) el.textContent = text;
@@ -31,7 +33,7 @@ window.ensureStomp = function ensureStomp() {
     };
     console.log(headers)
 
-    const socket = new SockJS("https://localhost:8443/ws");
+    const socket = new SockJS("https://5mwqpj9k-8443.euw.devtunnels.ms/ws");
     stompClient = Stomp.over(socket);
     stompClient.debug = () => {};
 
@@ -61,7 +63,7 @@ window.startCallTo = async function startCallTo(targetUserId) {
         await setupPeerConnection();
 
         const offer = await pc.createOffer({
-            offerToReceiveAudio: false,
+            offerToReceiveAudio: true,
             offerToReceiveVideo: true,
         });
         await pc.setLocalDescription(offer);
@@ -255,9 +257,9 @@ function handleControl(status) {
 }
 
 async function setupPeerConnection() {
-    pc = new RTCPeerConnection(rtcConfig);
+    pc = rtcConfig;
 
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     attachStream("localVideo", localStream);
 
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));

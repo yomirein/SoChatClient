@@ -18,7 +18,7 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class AuthService {
 
-    private final String baseUrl = "https://localhost:8443/api/auth";
+    private final String baseUrl = "http://localhost:8443/api/auth";
 
     public AuthService() {
         // пустой конструктор — не храним shared RestTemplate/cookieStore

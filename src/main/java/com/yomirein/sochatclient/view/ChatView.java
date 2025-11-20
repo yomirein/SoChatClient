@@ -116,7 +116,7 @@ public class ChatView extends VerticalLayout implements BeforeEnterObserver {
             Notification.show(e.getMessage());
         }
 
-        add(new H3(user.toString() + " " + cookieStore.getCookies()),chatHeaderView, chatMainView);
+        add(new H3(user.toString()/* + " " + cookieStore.getCookies()*/),chatHeaderView, chatMainView);
     }
     @Override
     public void beforeEnter(BeforeEnterEvent event) {

@@ -27,7 +27,7 @@ window.ensureStomp = function ensureStomp() {
     if (stompClient && stompClient.connected) return;
 
     // SockJS for compatibility with Spring's withSockJS()
-    const socket = new SockJS("http://localhost:8080/ws"); //тест
+    const socket = new SockJS("https://aax4r5-ip-37-232-183-121.tunnelmole.net/ws"); //тест
     stompClient = Stomp.over(socket);
 
     // Optional: silence debug logs
