@@ -60,6 +60,11 @@ public class WebSocketClient {
                 break;
             }
         }
+
+        cookieHeader = cookieList.stream()
+                .map(c -> c.getName() + "=" + c.getValue())
+                .collect(Collectors.joining("; "));
+
         this.token = tmp;
 
         ObjectMapper mapper = new ObjectMapper();
@@ -80,11 +85,8 @@ public class WebSocketClient {
         StompHeaders stompHeaders = new StompHeaders();
 
 
-        if (token != null) {
-            String bearer = "Bearer " + token;
-            stompHeaders.add("Authorization", bearer);
-            httpHeaders.add("Authorization", bearer);
-        }
+        stompHeaders.add("cookie", cookieHeader);
+        httpHeaders.add("cookie", cookieHeader);
 
         stompClient.connectAsync(wsUrl, httpHeaders, stompHeaders, new StompSessionHandlerAdapter() {
             @Override
@@ -120,11 +122,13 @@ public class WebSocketClient {
         String topic = "/topic/chat/" + chatId;
         chatHandlers.put(chatId, handler);
 
-        StompHeaders headers = new StompHeaders();
-        if (token != null) headers.add("Authorization", "Bearer " + token);
-        headers.setDestination(topic);
+        StompHeaders stompHeaders = new StompHeaders();
+        WebSocketHttpHeaders httpHeaders = new WebSocketHttpHeaders();
+        stompHeaders.add("cookie", cookieHeader);
+        httpHeaders.add("cookie", cookieHeader);
+        stompHeaders.setDestination(topic);
 
-        StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
+        StompSession.Subscription subscription = stompSession.subscribe(stompHeaders, new StompFrameHandler() {
             @Override
             public Type getPayloadType(StompHeaders headers) {
                 return Message.class;
@@ -153,11 +157,13 @@ public class WebSocketClient {
         }
 
         String topic = "/topic/create";
-        StompHeaders headers = new StompHeaders();
-        if (token != null) headers.add("Authorization", "Bearer " + token);
-        headers.setDestination(topic);
+        StompHeaders stompHeaders = new StompHeaders();
+        WebSocketHttpHeaders httpHeaders = new WebSocketHttpHeaders();
+        stompHeaders.add("cookie", cookieHeader);
+        httpHeaders.add("cookie", cookieHeader);
+        stompHeaders.setDestination(topic);
 
-        return stompSession.subscribe(headers, new StompFrameHandler() {
+        return stompSession.subscribe(stompHeaders, new StompFrameHandler() {
             @Override
             public Type getPayloadType(StompHeaders headers) {
                 return Chat.class;
@@ -180,11 +186,13 @@ public class WebSocketClient {
         String topic = "/topic/chats/" + userId;
         chatEventHandlers.put(userId, handler);
 
-        StompHeaders headers = new StompHeaders();
-        if (token != null) headers.add("Authorization", "Bearer " + token);
-        headers.setDestination(topic);
+        StompHeaders stompHeaders = new StompHeaders();
+        WebSocketHttpHeaders httpHeaders = new WebSocketHttpHeaders();
+        stompHeaders.add("cookie", cookieHeader);
+        httpHeaders.add("cookie", cookieHeader);
+        stompHeaders.setDestination(topic);
 
-        StompSession.Subscription subscription = stompSession.subscribe(headers, new StompFrameHandler() {
+        StompSession.Subscription subscription = stompSession.subscribe(stompHeaders, new StompFrameHandler() {
             @Override
             public Type getPayloadType(StompHeaders headers) {
                 return EventMessage.class;
@@ -227,12 +235,12 @@ public class WebSocketClient {
         message.setChatId(chatId);
         message.setContent(content);
 
-        StompHeaders headers = new StompHeaders();
-        if (token != null) headers.add("Authorization", "Bearer " + token);
-        headers.setDestination("/app/chat/" + chatId + "/send");
+        StompHeaders stompHeaders = new StompHeaders();
+        stompHeaders.add("cookie", cookieHeader);
+        stompHeaders.setDestination("/app/chat/" + chatId + "/send");
 
 
-        stompSession.send(headers, message);
+        stompSession.send(stompHeaders, message);
     }
 
     public void createChat(String username){
@@ -240,10 +248,10 @@ public class WebSocketClient {
             throw new IllegalStateException("Not connected yet");
         }
 
-        StompHeaders headers = new StompHeaders();
-        if (token != null) headers.add("Authorization", "Bearer " + token);
-        headers.setDestination("/app/create");
-        stompSession.send(headers, username);
+        StompHeaders stompHeaders = new StompHeaders();
+        stompHeaders.add("cookie", cookieHeader);
+        stompHeaders.setDestination("/app/create");
+        stompSession.send(stompHeaders, username);
     }
 
     public synchronized void disconnect() {

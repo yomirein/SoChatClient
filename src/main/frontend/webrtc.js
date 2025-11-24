@@ -33,7 +33,7 @@ window.ensureStomp = function ensureStomp() {
     };
     console.log(headers)
 
-    const socket = new SockJS("https://5mwqpj9k-8443.euw.devtunnels.ms/ws");
+    const socket = new SockJS("http://locahost:8443");
     stompClient = Stomp.over(socket);
     stompClient.debug = () => {};
 
